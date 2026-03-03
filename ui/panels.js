@@ -1,5 +1,5 @@
 import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
-import { AIRCRAFT_TYPES, getAircraftByType } from '../data/aircraft.js';
+import { AIRCRAFT_TYPES, getAircraftByType, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
 import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary } from '../engine/fleetManager.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
@@ -7,6 +7,7 @@ import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, 
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
 import { updateHUD } from './hud.js';
 import { renderMap } from './map.js';
+import { showConfirm } from './modals.js';
 
 export function initSideNav() {
     const nav = document.getElementById('side-nav');
@@ -151,7 +152,8 @@ function renderFleetList() {
         return `
             <div class="fleet-card">
                 <div class="fleet-card-header">
-                    <span class="fleet-reg">${ac.registration}</span>
+                    <span class="fleet-reg" data-reg-display="${ac.id}">${ac.registration}</span>
+                    <button class="fleet-rename-btn" data-rename="${ac.id}" title="Rename tail number">\u270E</button>
                     <span class="fleet-type">${ac.type}</span>
                     <span class="fleet-status status-${ac.status}">${ac.status.replace('_', ' ')}</span>
                 </div>
@@ -172,23 +174,74 @@ function renderFleetList() {
         `;
     }).join('');
 
+    listDiv.querySelectorAll('[data-rename]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.rename);
+            const aircraft = state.fleet.find(f => f.id === id);
+            if (!aircraft) return;
+            const regSpan = listDiv.querySelector(`[data-reg-display="${id}"]`);
+            if (!regSpan) return;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'fleet-rename-input';
+            input.value = aircraft.registration;
+            input.maxLength = 8;
+
+            regSpan.replaceWith(input);
+            input.focus();
+            input.select();
+            btn.style.display = 'none';
+
+            function commitRename() {
+                const newReg = input.value.trim().toUpperCase();
+                if (newReg && newReg.length <= 8) {
+                    aircraft.registration = newReg;
+                }
+                renderFleetList();
+            }
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') renderFleetList();
+            });
+            input.addEventListener('blur', commitRename);
+        });
+    });
+
     listDiv.querySelectorAll('[data-sell]').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = parseInt(btn.dataset.sell);
-            if (sellAircraft(id)) {
-                renderFleetList();
-                updateHUD();
-            }
+            const aircraft = state.fleet.find(f => f.id === id);
+            if (!aircraft) return;
+            showConfirm(
+                'Sell Aircraft',
+                `Sell <strong>${aircraft.type}</strong> (${aircraft.registration})?<br>You will receive the depreciated sale value.`,
+                () => {
+                    if (sellAircraft(id)) {
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
         });
     });
 
     listDiv.querySelectorAll('[data-return]').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = parseInt(btn.dataset.return);
-            if (returnLeasedAircraft(id)) {
-                renderFleetList();
-                updateHUD();
-            }
+            const aircraft = state.fleet.find(f => f.id === id);
+            if (!aircraft) return;
+            showConfirm(
+                'Return Leased Aircraft',
+                `Return leased <strong>${aircraft.type}</strong> (${aircraft.registration})?<br>The deposit will not be refunded.`,
+                () => {
+                    if (returnLeasedAircraft(id)) {
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
         });
     });
 }
@@ -227,19 +280,41 @@ function renderFleetShop() {
 
     shopDiv.querySelectorAll('[data-buy]').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (purchaseAircraft(btn.dataset.buy)) {
-                renderFleetList();
-                updateHUD();
-            }
+            const acData = getAircraftByType(btn.dataset.buy);
+            if (!acData) return;
+            showConfirm(
+                'Purchase Aircraft',
+                `<strong>${acData.type}</strong> (${acData.category})<br>` +
+                `${acData.seats} seats | ${acData.rangeKm.toLocaleString()} km range<br><br>` +
+                `Price: <strong>$${formatMoney(acData.purchasePrice)}</strong>`,
+                () => {
+                    if (purchaseAircraft(btn.dataset.buy)) {
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
         });
     });
 
     shopDiv.querySelectorAll('[data-lease]').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (leaseAircraft(btn.dataset.lease)) {
-                renderFleetList();
-                updateHUD();
-            }
+            const acData = getAircraftByType(btn.dataset.lease);
+            if (!acData) return;
+            const deposit = acData.leaseCostPerMonth * LEASE_DEPOSIT_MONTHS;
+            showConfirm(
+                'Lease Aircraft',
+                `<strong>${acData.type}</strong> (${acData.category})<br>` +
+                `${acData.seats} seats | ${acData.rangeKm.toLocaleString()} km range<br><br>` +
+                `Lease: <strong>$${formatMoney(acData.leaseCostPerMonth)}/month</strong><br>` +
+                `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong>`,
+                () => {
+                    if (leaseAircraft(btn.dataset.lease)) {
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
         });
     });
 }

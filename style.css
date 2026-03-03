@@ -850,6 +850,35 @@ html, body {
     color: var(--accent-blue);
 }
 
+.fleet-rename-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.fleet-rename-btn:hover {
+    color: var(--accent-blue);
+}
+
+.fleet-rename-input {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent-blue);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent-blue);
+    border-radius: 3px;
+    padding: 2px 8px;
+    width: 100px;
+    outline: none;
+    text-transform: uppercase;
+}
+
 .fleet-type {
     font-family: var(--font-body);
     font-weight: 600;
