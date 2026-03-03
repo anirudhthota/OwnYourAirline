@@ -625,6 +625,115 @@ html, body {
     display: block;
 }
 
+/* ======= MAP CONTROLS ======= */
+.map-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 50;
+    background: rgba(13, 17, 32, 0.92);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    min-width: 180px;
+    backdrop-filter: blur(8px);
+    user-select: none;
+}
+
+.map-controls-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.map-controls-title {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.map-controls-toggle {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px 4px;
+}
+
+.map-controls-toggle:hover {
+    color: var(--text-primary);
+}
+
+.map-controls-body {
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.map-controls-body.collapsed {
+    display: none;
+}
+
+.mc-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.mc-option:hover {
+    color: var(--text-primary);
+}
+
+.mc-option input[type="checkbox"] {
+    accent-color: var(--accent-blue);
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+}
+
+.mc-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
+}
+
+.mc-option-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+.mc-select {
+    width: 100%;
+    padding: 4px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    outline: none;
+    cursor: pointer;
+}
+
+.mc-select:focus {
+    border-color: var(--accent-blue);
+}
+
 .panel-content {
     height: 45%;
     min-height: 200px;

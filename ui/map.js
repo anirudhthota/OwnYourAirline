@@ -14,6 +14,16 @@ let mapState = {
     height: 0
 };
 
+let mapToggles = {
+    showPlayerRoutes: true,
+    showAIRoutes: true,
+    showLabels: true,
+    showFlights: true,
+    aiAirlineFilter: ''
+};
+
+let controlsPanel = null;
+
 export function initMap() {
     canvas = document.getElementById('map-canvas');
     if (!canvas) return;
@@ -28,7 +38,95 @@ export function initMap() {
     canvas.addEventListener('mouseleave', onMouseUp);
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
+    createMapControls();
     centerOnHub();
+}
+
+function createMapControls() {
+    const container = document.getElementById('map-container');
+    if (!container) return;
+
+    controlsPanel = document.createElement('div');
+    controlsPanel.className = 'map-controls';
+    controlsPanel.innerHTML = `
+        <div class="map-controls-header">
+            <span class="map-controls-title">Map</span>
+            <button class="map-controls-toggle" id="mc-toggle">\u25BC</button>
+        </div>
+        <div class="map-controls-body" id="mc-body">
+            <label class="mc-option">
+                <input type="checkbox" id="mc-player-routes" checked />
+                <span>Player routes</span>
+            </label>
+            <label class="mc-option">
+                <input type="checkbox" id="mc-ai-routes" checked />
+                <span>AI routes</span>
+            </label>
+            <label class="mc-option">
+                <input type="checkbox" id="mc-labels" checked />
+                <span>Airport labels</span>
+            </label>
+            <label class="mc-option">
+                <input type="checkbox" id="mc-flights" checked />
+                <span>Flight dots</span>
+            </label>
+            <div class="mc-divider"></div>
+            <label class="mc-option-label">Filter AI airline</label>
+            <select id="mc-airline-filter" class="mc-select">
+                <option value="">All airlines</option>
+            </select>
+        </div>
+    `;
+
+    container.appendChild(controlsPanel);
+
+    const toggleBtn = controlsPanel.querySelector('#mc-toggle');
+    const body = controlsPanel.querySelector('#mc-body');
+    toggleBtn.addEventListener('click', () => {
+        body.classList.toggle('collapsed');
+        toggleBtn.textContent = body.classList.contains('collapsed') ? '\u25B6' : '\u25BC';
+    });
+
+    controlsPanel.querySelector('#mc-player-routes').addEventListener('change', (e) => {
+        mapToggles.showPlayerRoutes = e.target.checked;
+        renderMap();
+    });
+    controlsPanel.querySelector('#mc-ai-routes').addEventListener('change', (e) => {
+        mapToggles.showAIRoutes = e.target.checked;
+        renderMap();
+    });
+    controlsPanel.querySelector('#mc-labels').addEventListener('change', (e) => {
+        mapToggles.showLabels = e.target.checked;
+        renderMap();
+    });
+    controlsPanel.querySelector('#mc-flights').addEventListener('change', (e) => {
+        mapToggles.showFlights = e.target.checked;
+        renderMap();
+    });
+
+    const filterSelect = controlsPanel.querySelector('#mc-airline-filter');
+    filterSelect.addEventListener('change', (e) => {
+        mapToggles.aiAirlineFilter = e.target.value;
+        renderMap();
+    });
+
+    populateAirlineFilter();
+}
+
+function populateAirlineFilter() {
+    const state = getState();
+    if (!state) return;
+    const filterSelect = document.getElementById('mc-airline-filter');
+    if (!filterSelect) return;
+
+    filterSelect.innerHTML = '<option value="">All airlines</option>';
+    const sorted = [...state.ai.airlines].sort((a, b) => a.name.localeCompare(b.name));
+    for (const airline of sorted) {
+        const opt = document.createElement('option');
+        opt.value = airline.iata;
+        opt.textContent = `${airline.iata} \u2014 ${airline.name}`;
+        filterSelect.appendChild(opt);
+    }
 }
 
 function resizeCanvas() {
@@ -101,20 +199,24 @@ export function renderMap() {
     const state = getState();
     if (!state) return;
 
-    ctx.fillStyle = '#0a0e1a';
+    ctx.fillStyle = '#080c18';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     drawWorldOutline();
-    drawAIRoutes();
-    drawPlayerRoutes();
+
+    if (mapToggles.showAIRoutes) drawAIRoutes();
+    if (mapToggles.showPlayerRoutes) drawPlayerRoutes();
+
     drawAirports();
-    drawActiveFlights();
+
+    if (mapToggles.showFlights) drawActiveFlights();
+
     drawHub();
 }
 
 function drawWorldOutline() {
-    ctx.strokeStyle = '#1a2040';
-    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#141a30';
+    ctx.lineWidth = 0.4;
     ctx.beginPath();
 
     for (let lon = -180; lon <= 180; lon += 30) {
@@ -135,9 +237,8 @@ function drawWorldOutline() {
 }
 
 function drawSimplifiedCoastlines() {
-    ctx.fillStyle = '#111730';
-    ctx.strokeStyle = '#1e2a4a';
-    ctx.lineWidth = 0.7;
+    ctx.strokeStyle = '#1c2848';
+    ctx.lineWidth = 0.8;
 
     const landmasses = [
         [[71,180],[71,-170],[65,-168],[60,-164],[57,-170],[55,-165],[55,-132],[60,-140],[60,-148],[70,-141],[72,-128],[68,-110],[63,-92],[58,-78],[52,-80],[48,-89],[44,-83],[42,-82],[30,-82],[26,-80],[25,-82],[30,-85],[30,-90],[29,-95],[26,-97],[28,-97],[26,-98],[23,-106],[20,-105],[15,-92],[15,-84],[10,-84],[10,-78],[8,-77]],
@@ -153,6 +254,9 @@ function drawSimplifiedCoastlines() {
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
+        ctx.closePath();
+        ctx.fillStyle = '#0e1428';
+        ctx.fill();
         ctx.stroke();
     }
 }
@@ -161,16 +265,25 @@ function drawAIRoutes() {
     const state = getState();
     if (!state) return;
 
-    ctx.lineWidth = 0.3;
-    ctx.globalAlpha = 0.08;
+    const filter = mapToggles.aiAirlineFilter;
 
     for (const route of state.ai.routes) {
+        if (filter && route.airlineIata !== filter) continue;
+
         const origin = getAirportByIata(route.origin);
         const dest = getAirportByIata(route.destination);
         if (!origin || !dest) continue;
 
         const airline = state.ai.airlines.find(a => a.iata === route.airlineIata);
-        ctx.strokeStyle = airline ? airline.color : '#666';
+        ctx.strokeStyle = airline ? airline.color : '#555';
+
+        if (filter) {
+            ctx.globalAlpha = 0.55;
+            ctx.lineWidth = 1.2;
+        } else {
+            ctx.globalAlpha = 0.15;
+            ctx.lineWidth = 0.5;
+        }
 
         const p1 = geoToScreen(origin.lat, origin.lon);
         const p2 = geoToScreen(dest.lat, dest.lon);
@@ -184,9 +297,8 @@ function drawPlayerRoutes() {
     const state = getState();
     if (!state) return;
 
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = state.config.airlineColor;
-    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.85;
 
     for (const route of state.routes) {
         if (!route.active) continue;
@@ -194,10 +306,15 @@ function drawPlayerRoutes() {
         const dest = getAirportByIata(route.destination);
         if (!origin || !dest) continue;
 
+        ctx.strokeStyle = state.config.airlineColor;
+        ctx.shadowColor = state.config.airlineColor;
+        ctx.shadowBlur = 3;
+
         const p1 = geoToScreen(origin.lat, origin.lon);
         const p2 = geoToScreen(dest.lat, dest.lon);
         drawArc(p1, p2);
     }
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 }
 
@@ -207,6 +324,7 @@ function drawArc(p1, p2) {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return;
     const bulge = dist * 0.15;
 
     const cpX = midX - (dy / dist) * bulge;
@@ -232,21 +350,32 @@ function drawAirports() {
 
     for (const airport of AIRPORTS) {
         const isRouted = routeAirports.has(airport.iata);
-        if (!showAll && !isRouted) continue;
+        const isHub = airport.iata === state.config.hubAirport;
+        if (!showAll && !isRouted && !isHub) continue;
 
         const { x, y } = geoToScreen(airport.lat, airport.lon);
         if (x < -50 || x > canvas.width + 50 || y < -50 || y > canvas.height + 50) continue;
 
-        ctx.fillStyle = isRouted ? state.config.airlineColor : '#334';
-        ctx.beginPath();
-        ctx.arc(x, y, isRouted ? 3 : 1.5, 0, Math.PI * 2);
-        ctx.fill();
+        if (isRouted) {
+            ctx.fillStyle = state.config.airlineColor;
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.fillStyle = '#2a3050';
+            ctx.beginPath();
+            ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
-        if (mapState.zoom >= 4 || isRouted) {
-            ctx.fillStyle = isRouted ? '#fff' : '#667';
-            ctx.font = `${Math.max(8, 10 * mapState.zoom / 4)}px "JetBrains Mono", monospace`;
+        if (mapToggles.showLabels && (mapState.zoom >= 4 || isRouted)) {
+            ctx.fillStyle = isRouted ? '#dde4f0' : '#556';
+            const fontSize = isRouted
+                ? Math.max(9, 11 * mapState.zoom / 4)
+                : Math.max(7, 9 * mapState.zoom / 4);
+            ctx.font = `${isRouted ? 'bold ' : ''}${fontSize}px "JetBrains Mono", monospace`;
             ctx.textAlign = 'center';
-            ctx.fillText(airport.iata, x, y - 6);
+            ctx.fillText(airport.iata, x, y - (isRouted ? 8 : 5));
         }
     }
 }
@@ -262,19 +391,25 @@ function drawHub() {
 
     ctx.strokeStyle = state.config.airlineColor;
     ctx.lineWidth = 2;
+    ctx.shadowColor = state.config.airlineColor;
+    ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.arc(x, y, 10, 0, Math.PI * 2);
     ctx.stroke();
 
+    ctx.shadowBlur = 0;
     ctx.fillStyle = state.config.airlineColor;
     ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 12px "JetBrains Mono", monospace';
+    ctx.font = 'bold 13px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(hub.iata, x, y - 14);
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(hub.iata, x, y - 16);
+    ctx.shadowBlur = 0;
 }
 
 function drawActiveFlights() {
@@ -294,6 +429,7 @@ function drawActiveFlights() {
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 1) continue;
         const bulge = dist * 0.15;
         const cpX = midX - (dy / dist) * bulge;
         const cpY = midY + (dx / dist) * bulge;
@@ -302,13 +438,18 @@ function drawActiveFlights() {
         const fx = (1 - t) * (1 - t) * p1.x + 2 * (1 - t) * t * cpX + t * t * p2.x;
         const fy = (1 - t) * (1 - t) * p1.y + 2 * (1 - t) * t * cpY + t * t * p2.y;
 
-        ctx.fillStyle = state.config.airlineColor;
+        ctx.fillStyle = '#fff';
         ctx.shadowColor = state.config.airlineColor;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 8;
         ctx.beginPath();
-        ctx.arc(fx, fy, 3, 0, Math.PI * 2);
+        ctx.arc(fx, fy, 3.5, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.fillStyle = state.config.airlineColor;
         ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 2, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 
