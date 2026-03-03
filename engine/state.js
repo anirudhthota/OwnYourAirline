@@ -15,7 +15,43 @@ export const GAME_SPEEDS = {
 
 export const TICK_MINUTES = 5;
 
+export const MINUTES_PER_HOUR = 60;
+export const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
+export const MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY;
+export const MINUTES_PER_MONTH = 4 * MINUTES_PER_WEEK;
+export const MINUTES_PER_YEAR = 12 * MINUTES_PER_MONTH;
+
 let gameState = null;
+
+export function getGameTime(totalMinutes) {
+    if (totalMinutes == null) totalMinutes = 0;
+    const year = 1 + Math.floor(totalMinutes / MINUTES_PER_YEAR);
+    const remainAfterYear = totalMinutes % MINUTES_PER_YEAR;
+    const month = 1 + Math.floor(remainAfterYear / MINUTES_PER_MONTH);
+    const remainAfterMonth = remainAfterYear % MINUTES_PER_MONTH;
+    const week = 1 + Math.floor(remainAfterMonth / MINUTES_PER_WEEK);
+    const remainAfterWeek = remainAfterMonth % MINUTES_PER_WEEK;
+    const day = 1 + Math.floor(remainAfterWeek / MINUTES_PER_DAY);
+    const remainAfterDay = remainAfterWeek % MINUTES_PER_DAY;
+    const hour = Math.floor(remainAfterDay / MINUTES_PER_HOUR);
+    const minute = remainAfterDay % MINUTES_PER_HOUR;
+    return { year, month, week, day, hour, minute };
+}
+
+export function getCurrentHour() {
+    if (!gameState) return 0;
+    return Math.floor((gameState.clock.totalMinutes % MINUTES_PER_DAY) / MINUTES_PER_HOUR);
+}
+
+export function getCurrentMinute() {
+    if (!gameState) return 0;
+    return gameState.clock.totalMinutes % MINUTES_PER_HOUR;
+}
+
+export function getAbsoluteMonth() {
+    if (!gameState) return 0;
+    return Math.floor(gameState.clock.totalMinutes / MINUTES_PER_MONTH);
+}
 
 export function createInitialState(config) {
     gameState = {
@@ -29,7 +65,7 @@ export function createInitialState(config) {
         },
 
         clock: {
-            currentDate: new Date(2025, 0, 1, 6, 0, 0),
+            totalMinutes: 6 * MINUTES_PER_HOUR,
             speed: GAME_SPEEDS.PAUSED,
             tickInterval: null,
             totalTicks: 0
@@ -98,7 +134,7 @@ export function setState(newState) {
 export function addLogEntry(message, type = 'info') {
     if (!gameState) return;
     gameState.log.unshift({
-        timestamp: new Date(gameState.clock.currentDate),
+        timestamp: gameState.clock.totalMinutes,
         message,
         type
     });
@@ -141,21 +177,24 @@ export function formatMoney(amount) {
 
 export function getFormattedDate() {
     if (!gameState) return '';
-    const d = gameState.clock.currentDate;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    const gt = getGameTime(gameState.clock.totalMinutes);
+    return `Year ${gt.year}, Month ${gt.month}, Week ${gt.week}, Day ${gt.day}`;
 }
 
 export function getFormattedTime() {
     if (!gameState) return '';
-    const d = gameState.clock.currentDate;
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const gt = getGameTime(gameState.clock.totalMinutes);
+    return `${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+}
+
+export function formatGameTimestamp(totalMinutes) {
+    const gt = getGameTime(totalMinutes);
+    return `Y${gt.year} M${gt.month} W${gt.week} D${gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
 }
 
 export function saveGame() {
     if (!gameState) return;
     const saveData = JSON.parse(JSON.stringify(gameState));
-    saveData.clock.currentDate = gameState.clock.currentDate.toISOString();
     saveData.clock.tickInterval = null;
     localStorage.setItem('ownYourAirline_save', JSON.stringify(saveData));
     addLogEntry('Game saved', 'system');
@@ -165,7 +204,6 @@ export function loadGame() {
     const raw = localStorage.getItem('ownYourAirline_save');
     if (!raw) return null;
     const data = JSON.parse(raw);
-    data.clock.currentDate = new Date(data.clock.currentDate);
     data.clock.tickInterval = null;
     data.clock.speed = GAME_SPEEDS.PAUSED;
     gameState = data;

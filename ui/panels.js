@@ -1,4 +1,4 @@
-import { getState, formatMoney } from '../engine/state.js';
+import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
 import { AIRCRAFT_TYPES, getAircraftByType } from '../data/aircraft.js';
 import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary } from '../engine/fleetManager.js';
@@ -719,9 +719,8 @@ function renderFinancesPanel(container) {
                     <thead><tr><th>Month</th><th>Revenue</th><th>Costs</th><th>Profit/Loss</th></tr></thead>
                     <tbody>
                         ${pnlData.map(p => {
-                            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
                             return `<tr>
-                                <td>${months[p.month]} ${p.year}</td>
+                                <td>Y${p.year} M${p.month}</td>
                                 <td>$${formatMoney(p.revenue)}</td>
                                 <td>$${formatMoney(p.costs)}</td>
                                 <td class="${p.profit >= 0 ? '' : 'negative'}">$${formatMoney(Math.abs(p.profit))}</td>
@@ -773,8 +772,6 @@ function renderLogPanel(container) {
     `;
 }
 
-function formatLogTime(date) {
-    if (!(date instanceof Date)) date = new Date(date);
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${date.getDate()} ${months[date.getMonth()]} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+function formatLogTime(totalMinutes) {
+    return formatGameTimestamp(totalMinutes);
 }

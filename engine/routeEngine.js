@@ -38,7 +38,7 @@ export function createRoute(originIata, destinationIata) {
         schedules: [],
         demand: calculateRouteDemand(origin, dest, distance),
         baseFare: calculateBaseFare(distance),
-        createdDate: new Date(state.clock.currentDate)
+        createdDate: state.clock.totalMinutes
     };
 
     state.routes.push(route);

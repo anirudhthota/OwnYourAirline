@@ -1,4 +1,4 @@
-import { getState, addLogEntry, addCash, deductCash, TICK_MINUTES, GAME_SPEEDS, formatMoney } from './state.js';
+import { getState, addLogEntry, addCash, deductCash, TICK_MINUTES, GAME_SPEEDS, formatMoney, MINUTES_PER_DAY, MINUTES_PER_HOUR, MINUTES_PER_MONTH, getGameTime } from './state.js';
 import { getAircraftByType } from '../data/aircraft.js';
 import { getAirportByIata } from '../data/airports.js';
 import { calculateLoadFactor, calculateFlightRevenue, calculateFlightCost, getRouteById, getTotalDailySeatsOnRoute } from './routeEngine.js';
@@ -30,16 +30,16 @@ export function tick() {
     const state = getState();
     if (!state || state.clock.speed === GAME_SPEEDS.PAUSED) return;
 
-    const prevDate = new Date(state.clock.currentDate);
-    state.clock.currentDate = new Date(state.clock.currentDate.getTime() + TICK_MINUTES * 60 * 1000);
+    const prevTotalMinutes = state.clock.totalMinutes;
+    state.clock.totalMinutes += TICK_MINUTES;
     state.clock.totalTicks++;
 
     processFlightDepartures();
     processActiveFlights();
     processSlotUsage();
 
-    const prevMonth = prevDate.getMonth();
-    const currMonth = state.clock.currentDate.getMonth();
+    const prevMonth = Math.floor(prevTotalMinutes / MINUTES_PER_MONTH);
+    const currMonth = Math.floor(state.clock.totalMinutes / MINUTES_PER_MONTH);
     if (currMonth !== prevMonth) {
         processMonthEnd();
     }
@@ -49,9 +49,9 @@ export function tick() {
 
 function processFlightDepartures() {
     const state = getState();
-    const now = state.clock.currentDate;
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    const minuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
+    const currentHour = Math.floor(minuteOfDay / MINUTES_PER_HOUR);
+    const currentMinute = minuteOfDay % MINUTES_PER_HOUR;
 
     for (const schedule of state.schedules) {
         if (!schedule.active) continue;
@@ -69,15 +69,10 @@ function processFlightDepartures() {
             if (currentMinutes >= depMinutes && currentMinutes < depMinutes + TICK_MINUTES) {
                 if (aircraft.status !== 'available') continue;
 
-                const slotKey = `${route.origin}_${currentHour}`;
                 if (!checkAndUseSlot(route.origin, currentHour)) {
-                    addLogEntry(`Slot unavailable at ${route.origin} for ${currentHour}:00 — flight skipped`, 'warning');
+                    addLogEntry(`Slot unavailable at ${route.origin} for ${String(currentHour).padStart(2, '0')}:00 — flight skipped`, 'warning');
                     continue;
                 }
-
-                const arrivalMinutes = depMinutes + schedule.blockTimeMinutes;
-                const arrivalHour = Math.floor(arrivalMinutes / 60) % 24;
-                const arrSlotKey = `${route.destination}_${arrivalHour}`;
 
                 launchFlight(schedule, route, aircraft, depTime);
             }
@@ -90,10 +85,10 @@ function launchFlight(schedule, route, aircraft, depTime) {
     const acData = getAircraftByType(aircraft.type);
     if (!acData) return;
 
-    const departureTime = new Date(state.clock.currentDate);
-    departureTime.setHours(depTime.hour, depTime.minute, 0, 0);
-
-    const arrivalTime = new Date(departureTime.getTime() + schedule.blockTimeMinutes * 60 * 1000);
+    const minuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
+    const currentDayStart = state.clock.totalMinutes - minuteOfDay;
+    const departureMinute = currentDayStart + depTime.hour * 60 + depTime.minute;
+    const arrivalMinute = departureMinute + schedule.blockTimeMinutes;
 
     const totalSeats = getTotalDailySeatsOnRoute(route.id);
     const loadFactor = calculateLoadFactor(route, totalSeats);
@@ -110,8 +105,8 @@ function launchFlight(schedule, route, aircraft, depTime) {
         registration: aircraft.registration,
         origin: route.origin,
         destination: route.destination,
-        departureTime: new Date(departureTime),
-        arrivalTime: new Date(arrivalTime),
+        departureTime: departureMinute,
+        arrivalTime: arrivalMinute,
         distance: route.distance,
         passengers,
         loadFactor,
@@ -130,12 +125,12 @@ function launchFlight(schedule, route, aircraft, depTime) {
 
 function processActiveFlights() {
     const state = getState();
-    const now = state.clock.currentDate.getTime();
+    const now = state.clock.totalMinutes;
     const completed = [];
 
     for (const flight of state.flights.active) {
-        const depTime = flight.departureTime.getTime();
-        const arrTime = flight.arrivalTime.getTime();
+        const depTime = flight.departureTime;
+        const arrTime = flight.arrivalTime;
         const totalTime = arrTime - depTime;
 
         if (totalTime <= 0) {
@@ -158,7 +153,7 @@ function processActiveFlights() {
         const aircraft = state.fleet.find(f => f.id === flight.aircraftId);
         if (aircraft) {
             aircraft.status = 'available';
-            const flightHours = (flight.arrivalTime - flight.departureTime) / (60 * 60 * 1000);
+            const flightHours = (flight.arrivalTime - flight.departureTime) / 60;
             aircraft.totalFlightHours += flightHours;
         }
 
@@ -174,8 +169,9 @@ function processActiveFlights() {
 
 function processSlotUsage() {
     const state = getState();
-    const currentHour = state.clock.currentDate.getHours();
-    const currentMinute = state.clock.currentDate.getMinutes();
+    const minuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
+    const currentHour = Math.floor(minuteOfDay / MINUTES_PER_HOUR);
+    const currentMinute = minuteOfDay % MINUTES_PER_HOUR;
 
     if (currentMinute === 0) {
         for (const key in state.slots) {
@@ -210,9 +206,11 @@ function processMonthEnd() {
     processMonthlyLeaseCosts();
     monthlyAIExpansion();
 
+    const gt = getGameTime(state.clock.totalMinutes);
+
     const pnl = {
-        month: state.clock.currentDate.getMonth(),
-        year: state.clock.currentDate.getFullYear(),
+        month: gt.month,
+        year: gt.year,
         revenue: state.finances.monthlyRevenue,
         costs: state.finances.monthlyCosts,
         profit: state.finances.monthlyRevenue - state.finances.monthlyCosts
