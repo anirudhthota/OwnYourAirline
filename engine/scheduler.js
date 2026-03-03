@@ -103,7 +103,7 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
         departureTimes: times,
         blockTimeMinutes: blockTime,
         active: true,
-        createdDate: new Date(state.clock.currentDate)
+        createdDate: state.clock.totalMinutes
     };
 
     state.schedules.push(schedule);

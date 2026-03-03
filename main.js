@@ -1,6 +1,6 @@
 import { showNewGameScreen } from './ui/newGame.js';
 import { initNewGame, initFromSave, startSimulation } from './engine/init.js';
-import { getState, hasSavedGame, GAME_SPEEDS } from './engine/state.js';
+import { getState, hasSavedGame, GAME_SPEEDS, MINUTES_PER_DAY, MINUTES_PER_WEEK, MINUTES_PER_MONTH } from './engine/state.js';
 import { setGameSpeed } from './engine/sim.js';
 import { createHUD, updateHUD } from './ui/hud.js';
 import { initMap, renderMap } from './ui/map.js';
@@ -157,8 +157,8 @@ function toggleSecretPanel() {
             <label style="display:block;margin-bottom:4px;">> FAST FORWARD</label>
             <div style="display:flex;gap:8px;">
                 <button class="__dp_btn" data-action="ff_1d">+1 DAY</button>
-                <button class="__dp_btn" data-action="ff_7d">+7 DAYS</button>
-                <button class="__dp_btn" data-action="ff_30d">+30 DAYS</button>
+                <button class="__dp_btn" data-action="ff_7d">+1 WEEK</button>
+                <button class="__dp_btn" data-action="ff_30d">+1 MONTH</button>
             </div>
         </div>
         <div style="margin-bottom:8px;">
@@ -211,7 +211,7 @@ function toggleSecretPanel() {
                                 type: acData.type,
                                 ownership: 'OWNED',
                                 purchasePrice: 0,
-                                purchaseDate: new Date(st.clock.currentDate),
+                                purchaseDate: st.clock.totalMinutes,
                                 totalFlightHours: 0,
                                 status: 'available',
                                 registration: `${st.config.iataCode}-${String(st.nextFleetId - 1).padStart(3, '0')}`
@@ -221,13 +221,13 @@ function toggleSecretPanel() {
                     break;
                 }
                 case 'ff_1d':
-                    st.clock.currentDate = new Date(st.clock.currentDate.getTime() + 86400000);
+                    st.clock.totalMinutes += MINUTES_PER_DAY;
                     break;
                 case 'ff_7d':
-                    st.clock.currentDate = new Date(st.clock.currentDate.getTime() + 86400000 * 7);
+                    st.clock.totalMinutes += MINUTES_PER_WEEK;
                     break;
                 case 'ff_30d':
-                    st.clock.currentDate = new Date(st.clock.currentDate.getTime() + 86400000 * 30);
+                    st.clock.totalMinutes += MINUTES_PER_MONTH;
                     break;
             }
             updateHUD();

@@ -1,4 +1,4 @@
-import { getState, addLogEntry, deductCash, addCash, formatMoney } from './state.js';
+import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR } from './state.js';
 import { getAircraftByType, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
 import { getSchedulesByAircraft } from './scheduler.js';
 
@@ -24,7 +24,7 @@ export function purchaseAircraft(aircraftType) {
         type: acData.type,
         ownership: OWNERSHIP_TYPE.OWNED,
         purchasePrice: acData.purchasePrice,
-        purchaseDate: new Date(state.clock.currentDate),
+        purchaseDate: state.clock.totalMinutes,
         totalFlightHours: 0,
         status: 'available',
         registration: generateRegistration(state)
@@ -53,7 +53,7 @@ export function leaseAircraft(aircraftType) {
         type: acData.type,
         ownership: OWNERSHIP_TYPE.LEASED,
         leaseCostPerMonth: acData.leaseCostPerMonth,
-        leaseStartDate: new Date(state.clock.currentDate),
+        leaseStartDate: state.clock.totalMinutes,
         depositPaid: deposit,
         totalFlightHours: 0,
         status: 'available',
@@ -89,7 +89,7 @@ export function sellAircraft(aircraftId) {
         return false;
     }
 
-    const ageYears = (state.clock.currentDate - new Date(aircraft.purchaseDate)) / (365.25 * 24 * 60 * 60 * 1000);
+    const ageYears = (state.clock.totalMinutes - aircraft.purchaseDate) / MINUTES_PER_YEAR;
     const depreciation = Math.pow(1 - DEPRECIATION_RATE_ANNUAL, ageYears);
     const salePrice = Math.round(aircraft.purchasePrice * depreciation * 0.85);
 
