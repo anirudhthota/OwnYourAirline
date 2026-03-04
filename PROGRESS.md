@@ -1,102 +1,129 @@
 # Own Your Airline — Progress Tracker
 
-## Status: Phase 1 Complete + Patch 1 Applied
+## Status: Phase 2 Session B Complete
 
-### Done
+### Phase 1 (Complete)
 
 - **Core Architecture** — 18 ES module files, vanilla JS, no frameworks, GitHub Pages compatible
 - **Data Layer** — 300+ real airports, 14 aircraft types (ATR-72 to 777X), 150+ real AI airlines
 - **Game State** — Central state object, save/load via localStorage, difficulty presets + sandbox
 - **New Game Screen** — Airline name, IATA code, color picker, searchable hub selector, difficulty cards
 - **Simulation Engine** — Tick-based (5 min per tick), multi-speed (1x/2x/4x/8x), pause/resume
-- **Game Time System** — Year/Month/Week/Day format (Month = 4 weeks, Week = 7 days), totalMinutes counter replaces calendar Date. Display: "Year 1, Month 3, Week 2, Day 4 — 14:35"
-- **Fleet Management** — Purchase and lease aircraft, sell (with depreciation), return leases, monthly lease deductions, registration generation
-- **Confirmation Dialogs** — Confirm before purchase, lease, sell, and return lease with details (price, specs, deposit)
-- **Tail Number Rename** — Inline pencil-icon edit, max 8 chars, auto-uppercase, Enter/blur to save, Escape to cancel
-- **Route Network** — Create/delete routes, Haversine distance, base fare tiers, demand model, load factor, duplicate detection
-- **Scheduling** — Custom (manual departure times) and Banked (connection wave) modes, block time calculation
-- **Slot System** — Per-airport hourly slot limits, slot exhaustion warnings
-- **Flight Operations** — Departure matching, in-flight progress tracking, completion with revenue/cost, aircraft status cycling
+- **Game Time System** — Year/Month/Week/Day format (Month = 4 weeks, Week = 7 days), totalMinutes counter
+- **Fleet Management** — Purchase and lease aircraft, sell (with depreciation), return leases, monthly lease deductions
+- **Confirmation Dialogs** — Confirm before purchase, lease, sell, return with details
+- **Tail Number Rename** — Inline pencil-icon edit
+- **Route Network** — Create/delete routes, Haversine distance, base fare tiers, demand model, load factor
+- **Scheduling** — Custom (manual times) and Banked (connection wave) modes, block time calculation
+- **Slot System** — Per-airport hourly slot limits
+- **Flight Operations** — Departure matching, in-flight progress tracking, completion with revenue/cost
 - **AI Airlines** — 150+ airlines with real hubs/alliances, regional route generation, monthly expansion
 - **Economics** — Revenue per pax, fuel/crew/airport/maintenance costs, monthly P&L, bankruptcy warning
-- **World Map** — Canvas Mercator projection, pan/zoom, coastlines, grid overlay
-- **Map Controls Panel** — Top-right toggleable panel with: player routes, AI routes, airport labels, flight dots toggles, AI airline filter dropdown
-- **Map Visual Improvements** — Filled landmasses, player routes with glow (2px, 0.85 alpha), AI routes at 0.15 alpha, hub with glow ring, flight dots with white halo, routed airports larger (4px), bold labels
-- **HUD** — Airline name, IATA, game date/time, speed controls, cash/fleet/flights/routes stats, save button
+- **World Map** — Canvas Mercator projection, pan/zoom, grid overlay
+- **Map Controls** — Toggles for player routes, AI routes, labels, flight dots, AI airline filter
+- **HUD** — Airline name, IATA, game date/time, speed controls, stats, save button
 - **Side Navigation** — 6 panels: Dashboard, Fleet, Routes, Schedule, Finances, Log
-- **Dashboard** — Overview cards for all key metrics
-- **Finances Panel** — Cash summary, monthly P&L table (Y/M format), recent flights table
-- **Log Panel** — Timestamped event log with color-coded types (info, finance, warning, error, route, fleet, schedule, system)
-- **Modals** — Generic modal + confirm dialog system
-- **DEVMODE** — Hidden terminal (type DEVMODE): set/add cash, reputation slider, instant fleet add, fast forward (+1 day/week/month), god mode
-- **Dark Theme** — Full CSS with Orbitron/Rajdhani/JetBrains Mono fonts, aviation dashboard aesthetic, responsive
+- **DEVMODE** — Hidden terminal: set/add cash, reputation slider, instant fleet, fast forward, god mode
+- **Dark Theme** — Orbitron/Rajdhani/JetBrains Mono fonts, aviation dashboard aesthetic
+
+### Phase 2 Session A (Patches)
+
+- **Time System Refactor** — totalMinutes counter replaces Date objects
+- **Map Fixes** — 14 detailed continent polygons, viewport culling, AI route cap (50), hub-distance priority, 0.08 opacity
+- **Confirm Dialogs** — Added to all destructive fleet/route actions
+- **PROGRESS.md** — Created as permanent tracker
+
+### Phase 2 Session B (Complete)
+
+- **Task 1: Directional Routes** — Each route is one-way (A→B and B→A are separate). "Also create return route" checkbox. Arc offset for bidirectional visualization. Direction-specific AI competitor query.
+
+- **Task 2: Aircraft Status Badges** — All aircraft shown in schedule picker with status badges (Available/Busy/Maintenance). Busy aircraft show "Free at DX HH:MM" next-free time. Warning when selecting busy/maintenance aircraft. Simple/Ops mode toggle in Schedule panel.
+
+- **Task 3: Turnaround Enforcement** — Minimum turnaround times by category (Regional 25m, Narrow 45m, Wide 90m, Super Heavy 120m). Schedule creation validates gap between departures. Turnaround shown in schedule cards and range check.
+
+- **Task 4: Slot Model V1** — 5 slot control levels (Uncontrolled to Slot-Controlled). Level 5: LHR/JFK/NRT/CDG/HND. Level 4: DXB/SIN/FRA/AMS/IST. Level 3: DEL/BOM/DFW/LAX/ORD/ATL. Level 3+ enforces slots — unavailable slots delay flights (not skip). Delay cascade to next rotation. One-time slot fee on route creation. Player auto-holds hub slots. Airports sub-panel showing slot usage per airport. Level 4-5 show availability percentage.
+
+- **Task 5: Daily P&L** — End-of-day notification slides in from right (auto-dismiss 8s). Shows flights operated, passengers carried, revenue/costs breakdown, net profit/loss, best/worst route. Finances panel enhanced with daily P&L canvas bar chart (last 30 days, green/red bars), running cash balance table, monthly summary preserved.
+
+- **Task 6: Starter Fleet via Used Market** — Used Aircraft Market tab in Fleet panel. 3-5 random aircraft at game start, refreshes every 30 in-game days. Prices 60-80% of new. Each listing: type, age (2-10yr), hours flown, price, condition (Good/Fair). Buy or lease with confirm dialogs. Easy/Medium: A321neo pre-listed at 55% discount. Sandbox: free A321neo in fleet at start.
 
 ### In Progress
 
 - Nothing currently in progress
 
-### Next
+### Session C Will Cover
 
 - Event system (random events: mechanical issues, strikes, weather delays, demand surges)
-- More detailed aircraft stats panel (utilization, cycle count, next maintenance)
-- Route profitability breakdown per route
-- AI airline competition effects on pricing/demand
 - Alliance system for player
+- Aircraft maintenance model (cycles, downtime, cost)
+- Route profitability detailed breakdown
+- AI competition effects on pricing/demand
+- Passenger class model (Economy/Business/First)
+- Codeshare agreements
 - Achievements/milestones
-- Sound effects (optional)
-- Tutorial/onboarding flow
 
 ### Decisions
 
-1. **Game time over calendar time** — Game uses abstract Year/Month/Week/Day instead of real calendar dates. Month = exactly 4 weeks = 28 days. Year = 12 months = 336 days. This avoids real-world date complexity and makes P&L/depreciation calculations clean.
-2. **totalMinutes counter** — Single integer counter for game clock (minutes since game start). All timestamps (purchase dates, log entries, flights) stored as totalMinutes values. No Date objects in game state.
-3. **No automation** — Player must manually create routes, assign aircraft, set schedules. No auto-assign. This is the core design philosophy.
-4. **Custom + Banked scheduling** — Two distinct scheduling modes. Custom = player picks exact times. Banked = connection wave windows with auto-generated departure times.
-5. **Slot system is per-hour** — Each airport has slotsPerHour. Slots reset each hour. Flights that can't get a slot are skipped (warning logged).
-6. **Depreciation on sell** — Aircraft lose value annually (DEPRECIATION_RATE_ANNUAL) plus a 15% dealer margin on sale.
-7. **Lease deposits** — Leasing requires upfront deposit (LEASE_DEPOSIT_MONTHS × monthly cost), non-refundable on return.
-8. **AI routes are visual-only** — AI airlines show routes on map but don't directly compete for slots or affect load factors (simplified for Phase 1).
-9. **Map controls as overlay** — Map toggles live in a semi-transparent collapsible panel over the canvas, not in the side panel, to keep the map as the primary view.
+1. **Game time over calendar time** — Abstract Year/Month/Week/Day instead of real calendar dates. Month = 4 weeks = 28 days. Year = 12 months = 336 days.
+2. **totalMinutes counter** — Single integer counter for game clock. All timestamps stored as totalMinutes.
+3. **No automation** — Player must manually create routes, assign aircraft, set schedules. No auto-assign. Core design philosophy.
+4. **Custom + Banked scheduling** — Two distinct scheduling modes.
+5. **Slot system is per-hour** — Each airport has slotsPerHour. Level 3+ airports enforce slots with delays.
+6. **Depreciation on sell** — Annual depreciation rate plus 15% dealer margin.
+7. **Lease deposits** — Upfront deposit, non-refundable on return.
+8. **AI routes are visual-only** — AI airlines show routes on map but don't compete for slots (simplified for Phase 1-2).
+9. **Map controls as overlay** — Toggles live in collapsible panel over the canvas.
+10. **Directional routes** — Each route is one-way. A→B and B→A are independent route objects.
+11. **Slot costs are origin-only** — Each direction pays slot fee for its origin airport only. Hub is free.
+12. **Used market for starter fleet** — No free aircraft on Easy/Medium. Used market provides affordable entry point.
+13. **Daily P&L is non-blocking** — Notification auto-dismisses, doesn't pause the game.
 
 ### Known Issues
 
-1. **AI competition is shallow** — `getAICompetitorsOnRoute` counts overlapping AI routes but doesn't meaningfully reduce player demand/fare yet.
-2. **No schedule conflict detection** — Nothing prevents scheduling the same aircraft on overlapping routes/times. Aircraft just stays "in_flight" and additional departures are skipped.
-3. **Flight dots may overlap** — Multiple flights on the same route show overlapping dots with no offset.
-4. **No maintenance system** — Aircraft never need maintenance, no downtime beyond flight status.
-5. **Simplified coastlines** — Map landmasses are very rough approximations (4 polygons).
-6. **No touch support** — Map pan/zoom is mouse-only (no touch events for mobile).
-7. **Save compatibility** — Old saves (with Date objects) won't load correctly after the time system refactor. Players need to start a new game.
-8. **P&L month labels** — Monthly P&L shows "Y1 M1" format which is compact but less intuitive than month names. This matches the game time system by design.
+1. **AI competition is shallow** — `getAICompetitorsOnRoute` counts but doesn't meaningfully affect demand yet.
+2. **No maintenance system** — Aircraft never need maintenance, no downtime.
+3. **No touch support** — Map pan/zoom is mouse-only.
+4. **Save compatibility** — Saves from Phase 1 may not load correctly. Start new game recommended.
+5. **Delay cascade limited** — Delays propagate to next rotation but don't cascade through full day's schedule.
+6. **Used market RNG** — Market refresh is random, may occasionally offer no useful aircraft types.
+7. **Daily P&L chart doesn't show on first day** — Need at least one full day of operations for data.
 
 ### Test Checklist
 
-- [ ] New game: create airline with all fields, verify game launches
-- [ ] HUD: date shows "Year 1, Month 1, Week 1, Day 1", time shows "06:00"
-- [ ] Speed controls: pause, 1x, 2x, 4x, 8x all work, time advances
-- [ ] Month rollover: run to end of Month 1, verify P&L entry created
-- [ ] Fleet: purchase aircraft via shop, confirm dialog appears with price
-- [ ] Fleet: lease aircraft via shop, confirm dialog shows deposit amount
-- [ ] Fleet: sell aircraft, confirm dialog appears
-- [ ] Fleet: return leased aircraft, confirm dialog appears
-- [ ] Fleet: rename tail number — click pencil, type new name, press Enter
-- [ ] Fleet: rename cancel — click pencil, press Escape, name unchanged
-- [ ] Routes: create route, verify map shows arc and airports
-- [ ] Routes: delete route, verify map updates
+- [ ] New game: create airline, verify game launches
+- [ ] HUD: date/time displays correctly, speed controls work
+- [ ] Month rollover: verify P&L entry created
+- [ ] Fleet: purchase/lease/sell/return aircraft with confirm dialogs
+- [ ] Fleet: rename tail number (pencil icon, Enter/Escape)
+- [ ] Fleet: used market tab shows listings with age/hours/condition
+- [ ] Fleet: buy/lease from used market
+- [ ] Fleet: used market refreshes after 30 in-game days
+- [ ] Fleet: Sandbox mode starts with free A321neo
+- [ ] Fleet: Easy/Medium mode shows discounted A321neo in used market
+- [ ] Routes: create route, verify one-way direction
+- [ ] Routes: "Also create return route" checkbox creates both directions
+- [ ] Routes: route info shows slot control level and cost
+- [ ] Routes: slot fee deducted on creation (hub exempt)
+- [ ] Routes: Airports sub-panel shows slot usage per airport
+- [ ] Routes: delete route
 - [ ] Schedule: create custom schedule with manual times
-- [ ] Schedule: create banked schedule with connection bank
-- [ ] Flights: verify flights launch at scheduled times
-- [ ] Flights: verify flight dots move on map
-- [ ] Flights: verify flights complete, revenue added, aircraft freed
-- [ ] Map: pan and zoom work smoothly
-- [ ] Map controls: toggle player routes off, arcs disappear
-- [ ] Map controls: toggle AI routes off, AI arcs disappear
-- [ ] Map controls: toggle labels off, IATA codes hidden
-- [ ] Map controls: toggle flight dots off, dots hidden
-- [ ] Map controls: filter single AI airline, only that airline's routes highlighted
-- [ ] Map controls: collapse/expand panel
-- [ ] Finances: monthly P&L table shows Y/M format
-- [ ] Log: events show timestamps in "Y1 M1 W1 D1 HH:MM" format
-- [ ] Save/Load: save game, refresh page, continue game loads correctly
-- [ ] DEVMODE: type DEVMODE, terminal appears, all commands work
-- [ ] DEVMODE: fast forward +1 day/week/month advances time correctly
+- [ ] Schedule: turnaround validation rejects too-close departures
+- [ ] Schedule: range check shows block time + turnaround
+- [ ] Schedule: aircraft picker shows status badges
+- [ ] Schedule: busy aircraft show next-free time
+- [ ] Flights: launch at scheduled times, dots move on map
+- [ ] Flights: complete with revenue, aircraft freed
+- [ ] Flights: slot delay at Level 3+ airports logged as warning
+- [ ] Flights: delayed flight retries next tick
+- [ ] Map: 14 continent polygons visible, pan/zoom smooth
+- [ ] Map: AI routes capped at 50, viewport culled, 0.08 opacity
+- [ ] Map: bidirectional routes show offset arcs
+- [ ] Map controls: all toggles work including AI routes off
+- [ ] Daily P&L: notification slides in at end of day
+- [ ] Daily P&L: shows flights/pax/revenue/costs/net/best/worst
+- [ ] Daily P&L: auto-dismisses after 8 seconds
+- [ ] Finances: daily P&L bar chart renders (last 30 days)
+- [ ] Finances: running cash balance table shows last 10 days
+- [ ] Finances: monthly P&L table preserved
+- [ ] Save/Load: save game, refresh, continue works
+- [ ] DEVMODE: all commands work
