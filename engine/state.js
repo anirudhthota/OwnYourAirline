@@ -106,6 +106,12 @@ export function createInitialState(config) {
         slots: {},
         delayedFlights: [],
 
+        usedMarket: {
+            listings: [],
+            lastRefreshDay: 0,
+            nextListingId: 1
+        },
+
         banks: [],
         nextBankId: 1,
 

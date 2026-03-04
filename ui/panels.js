@@ -1,7 +1,7 @@
 import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
 import { AIRCRAFT_TYPES, getAircraftByType, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
 import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlLevel, SLOT_CONTROL_LEVELS, getSlotCost } from '../data/airports.js';
-import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree } from '../engine/fleetManager.js';
+import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
 import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft } from '../engine/scheduler.js';
@@ -124,18 +124,32 @@ function renderFleetPanel(container) {
     container.innerHTML = `
         <div class="panel-header">
             <h2>Fleet Management</h2>
-            <button class="btn-accent" id="fleet-buy-btn">Purchase / Lease Aircraft</button>
+            <div>
+                <button class="btn-sm" id="fleet-used-btn" style="margin-right:6px;">Used Market</button>
+                <button class="btn-accent" id="fleet-buy-btn">New Aircraft</button>
+            </div>
         </div>
-        <div id="fleet-list" class="fleet-list"></div>
+        <div id="fleet-used-market" class="fleet-shop hidden"></div>
         <div id="fleet-shop" class="fleet-shop hidden"></div>
+        <div id="fleet-list" class="fleet-list"></div>
     `;
 
     renderFleetList();
 
     document.getElementById('fleet-buy-btn').addEventListener('click', () => {
         const shop = document.getElementById('fleet-shop');
+        const used = document.getElementById('fleet-used-market');
+        used.classList.add('hidden');
         shop.classList.toggle('hidden');
         if (!shop.classList.contains('hidden')) renderFleetShop();
+    });
+
+    document.getElementById('fleet-used-btn').addEventListener('click', () => {
+        const shop = document.getElementById('fleet-shop');
+        const used = document.getElementById('fleet-used-market');
+        shop.classList.add('hidden');
+        used.classList.toggle('hidden');
+        if (!used.classList.contains('hidden')) renderUsedMarket();
     });
 }
 
@@ -313,6 +327,105 @@ function renderFleetShop() {
                 `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong>`,
                 () => {
                     if (leaseAircraft(btn.dataset.lease)) {
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
+        });
+    });
+}
+
+function renderUsedMarket() {
+    const state = getState();
+    const usedDiv = document.getElementById('fleet-used-market');
+    if (!usedDiv) return;
+
+    const market = state.usedMarket;
+    if (!market || market.listings.length === 0) {
+        usedDiv.innerHTML = `
+            <h3>Used Aircraft Market</h3>
+            <div class="empty-state-sm">No used aircraft available. Market refreshes every 30 in-game days.</div>
+        `;
+        return;
+    }
+
+    const currentDay = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY);
+    const daysUntilRefresh = Math.max(0, 30 - (currentDay - market.lastRefreshDay));
+
+    usedDiv.innerHTML = `
+        <h3>Used Aircraft Market</h3>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;font-family:var(--font-mono);">Refreshes in ${daysUntilRefresh} days | ${market.listings.length} aircraft available</div>
+        <div class="shop-grid">
+            ${market.listings.map(listing => {
+                const condColor = listing.condition === 'Good' ? 'var(--accent-green)' : 'var(--accent-yellow)';
+                return `
+                    <div class="shop-card" ${listing.featured ? 'style="border-color:var(--accent-green);"' : ''}>
+                        ${listing.featured ? '<div style="color:var(--accent-green);font-family:var(--font-mono);font-size:10px;text-transform:uppercase;margin-bottom:4px;">Featured Deal</div>' : ''}
+                        <div class="shop-card-header">
+                            <span class="shop-type">${listing.type}</span>
+                            <span class="shop-category">${listing.category}</span>
+                        </div>
+                        <div class="shop-specs">
+                            <div><span>Seats:</span> ${listing.seats}</div>
+                            <div><span>Range:</span> ${listing.rangeKm.toLocaleString()} km</div>
+                            <div><span>Age:</span> ${listing.ageYears} years</div>
+                            <div><span>Hours:</span> ${listing.hoursFlown.toLocaleString()}</div>
+                            <div><span>Condition:</span> <span style="color:${condColor}">${listing.condition}</span></div>
+                        </div>
+                        <div class="shop-prices">
+                            <div>Buy: $${formatMoney(listing.price)}</div>
+                            <div>Lease: $${formatMoney(listing.leasePrice)}/mo</div>
+                            <div style="font-size:11px;color:var(--text-muted);">${Math.round(listing.priceMultiplier * 100)}% of new</div>
+                        </div>
+                        <div class="shop-actions">
+                            <button class="btn-sm btn-accent" data-buy-used="${listing.id}">Buy</button>
+                            <button class="btn-sm btn-secondary" data-lease-used="${listing.id}">Lease</button>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    usedDiv.querySelectorAll('[data-buy-used]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.buyUsed);
+            const listing = market.listings.find(l => l.id === id);
+            if (!listing) return;
+            showConfirm(
+                'Purchase Used Aircraft',
+                `<strong>${listing.type}</strong> (${listing.category})<br>` +
+                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                `Price: <strong>$${formatMoney(listing.price)}</strong> (${Math.round(listing.priceMultiplier * 100)}% of new)`,
+                () => {
+                    if (purchaseUsedAircraft(id)) {
+                        renderUsedMarket();
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
+        });
+    });
+
+    usedDiv.querySelectorAll('[data-lease-used]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.leaseUsed);
+            const listing = market.listings.find(l => l.id === id);
+            if (!listing) return;
+            const deposit = listing.leasePrice * LEASE_DEPOSIT_MONTHS;
+            showConfirm(
+                'Lease Used Aircraft',
+                `<strong>${listing.type}</strong> (${listing.category})<br>` +
+                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                `Lease: <strong>$${formatMoney(listing.leasePrice)}/month</strong><br>` +
+                `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong>`,
+                () => {
+                    if (leaseUsedAircraft(id)) {
+                        renderUsedMarket();
                         renderFleetList();
                         updateHUD();
                     }

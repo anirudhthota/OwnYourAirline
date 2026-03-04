@@ -2,7 +2,7 @@ import { getState, addLogEntry, addCash, deductCash, TICK_MINUTES, GAME_SPEEDS, 
 import { getAircraftByType } from '../data/aircraft.js';
 import { getAirportByIata, getSlotControlLevel } from '../data/airports.js';
 import { calculateLoadFactor, calculateFlightRevenue, calculateFlightCost, getRouteById, getTotalDailySeatsOnRoute } from './routeEngine.js';
-import { processMonthlyLeaseCosts } from './fleetManager.js';
+import { processMonthlyLeaseCosts, checkUsedMarketRefresh } from './fleetManager.js';
 import { monthlyAIExpansion } from './aiEngine.js';
 
 let tickCallback = null;
@@ -331,6 +331,8 @@ function processDayEnd(prevTotalMinutes) {
     state.finances.dailyCosts = 0;
     state.finances.dailyFlights = 0;
     state.finances.dailyPassengers = 0;
+
+    checkUsedMarketRefresh();
 
     if (dayEndCallback) dayEndCallback(dailyRecord);
 }
