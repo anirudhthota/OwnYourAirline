@@ -2,6 +2,12 @@
 
 ## Status: Phase 2 Session B Complete
 
+### Context Files
+
+- **CONTEXT.md** — Project description, tech stack, design non-negotiables, locked decisions, phase roadmap, DEVMODE documentation. Written for AI audience.
+- **ARCHITECTURE.md** — File tree, data flow, key data structures (exact shapes), module dependency map, rendering pipeline, map pipeline, inviolable rules.
+- **PROGRESS.md** — This file. Current status, what's done, what's next, known issues, test checklist.
+
 ### Phase 1 (Complete)
 
 - **Core Architecture** — 18 ES module files, vanilla JS, no frameworks, GitHub Pages compatible
