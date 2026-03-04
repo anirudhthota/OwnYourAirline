@@ -1,10 +1,13 @@
 import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
 import { AIRCRAFT_TYPES, getAircraftByType, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
-import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
-import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary } from '../engine/fleetManager.js';
+import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlLevel, SLOT_CONTROL_LEVELS, getSlotCost } from '../data/airports.js';
+import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
+import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
-import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft } from '../engine/scheduler.js';
+import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft } from '../engine/scheduler.js';
+import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
+import { getSlotUsageForAirport } from '../engine/sim.js';
 import { updateHUD } from './hud.js';
 import { renderMap } from './map.js';
 import { showConfirm } from './modals.js';
@@ -121,18 +124,32 @@ function renderFleetPanel(container) {
     container.innerHTML = `
         <div class="panel-header">
             <h2>Fleet Management</h2>
-            <button class="btn-accent" id="fleet-buy-btn">Purchase / Lease Aircraft</button>
+            <div>
+                <button class="btn-sm" id="fleet-used-btn" style="margin-right:6px;">Used Market</button>
+                <button class="btn-accent" id="fleet-buy-btn">New Aircraft</button>
+            </div>
         </div>
-        <div id="fleet-list" class="fleet-list"></div>
+        <div id="fleet-used-market" class="fleet-shop hidden"></div>
         <div id="fleet-shop" class="fleet-shop hidden"></div>
+        <div id="fleet-list" class="fleet-list"></div>
     `;
 
     renderFleetList();
 
     document.getElementById('fleet-buy-btn').addEventListener('click', () => {
         const shop = document.getElementById('fleet-shop');
+        const used = document.getElementById('fleet-used-market');
+        used.classList.add('hidden');
         shop.classList.toggle('hidden');
         if (!shop.classList.contains('hidden')) renderFleetShop();
+    });
+
+    document.getElementById('fleet-used-btn').addEventListener('click', () => {
+        const shop = document.getElementById('fleet-shop');
+        const used = document.getElementById('fleet-used-market');
+        shop.classList.add('hidden');
+        used.classList.toggle('hidden');
+        if (!used.classList.contains('hidden')) renderUsedMarket();
     });
 }
 
@@ -155,7 +172,7 @@ function renderFleetList() {
                     <span class="fleet-reg" data-reg-display="${ac.id}">${ac.registration}</span>
                     <button class="fleet-rename-btn" data-rename="${ac.id}" title="Rename tail number">\u270E</button>
                     <span class="fleet-type">${ac.type}</span>
-                    <span class="fleet-status status-${ac.status}">${ac.status.replace('_', ' ')}</span>
+                    <span class="fleet-status status-${ac.status}">${ac.status === 'in_flight' ? 'BUSY' : ac.status.toUpperCase()}</span>
                 </div>
                 <div class="fleet-card-details">
                     <span>${acData ? acData.seats + ' seats' : ''}</span>
@@ -319,15 +336,118 @@ function renderFleetShop() {
     });
 }
 
+function renderUsedMarket() {
+    const state = getState();
+    const usedDiv = document.getElementById('fleet-used-market');
+    if (!usedDiv) return;
+
+    const market = state.usedMarket;
+    if (!market || market.listings.length === 0) {
+        usedDiv.innerHTML = `
+            <h3>Used Aircraft Market</h3>
+            <div class="empty-state-sm">No used aircraft available. Market refreshes every 30 in-game days.</div>
+        `;
+        return;
+    }
+
+    const currentDay = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY);
+    const daysUntilRefresh = Math.max(0, 30 - (currentDay - market.lastRefreshDay));
+
+    usedDiv.innerHTML = `
+        <h3>Used Aircraft Market</h3>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;font-family:var(--font-mono);">Refreshes in ${daysUntilRefresh} days | ${market.listings.length} aircraft available</div>
+        <div class="shop-grid">
+            ${market.listings.map(listing => {
+                const condColor = listing.condition === 'Good' ? 'var(--accent-green)' : 'var(--accent-yellow)';
+                return `
+                    <div class="shop-card" ${listing.featured ? 'style="border-color:var(--accent-green);"' : ''}>
+                        ${listing.featured ? '<div style="color:var(--accent-green);font-family:var(--font-mono);font-size:10px;text-transform:uppercase;margin-bottom:4px;">Featured Deal</div>' : ''}
+                        <div class="shop-card-header">
+                            <span class="shop-type">${listing.type}</span>
+                            <span class="shop-category">${listing.category}</span>
+                        </div>
+                        <div class="shop-specs">
+                            <div><span>Seats:</span> ${listing.seats}</div>
+                            <div><span>Range:</span> ${listing.rangeKm.toLocaleString()} km</div>
+                            <div><span>Age:</span> ${listing.ageYears} years</div>
+                            <div><span>Hours:</span> ${listing.hoursFlown.toLocaleString()}</div>
+                            <div><span>Condition:</span> <span style="color:${condColor}">${listing.condition}</span></div>
+                        </div>
+                        <div class="shop-prices">
+                            <div>Buy: $${formatMoney(listing.price)}</div>
+                            <div>Lease: $${formatMoney(listing.leasePrice)}/mo</div>
+                            <div style="font-size:11px;color:var(--text-muted);">${Math.round(listing.priceMultiplier * 100)}% of new</div>
+                        </div>
+                        <div class="shop-actions">
+                            <button class="btn-sm btn-accent" data-buy-used="${listing.id}">Buy</button>
+                            <button class="btn-sm btn-secondary" data-lease-used="${listing.id}">Lease</button>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    usedDiv.querySelectorAll('[data-buy-used]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.buyUsed);
+            const listing = market.listings.find(l => l.id === id);
+            if (!listing) return;
+            showConfirm(
+                'Purchase Used Aircraft',
+                `<strong>${listing.type}</strong> (${listing.category})<br>` +
+                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                `Price: <strong>$${formatMoney(listing.price)}</strong> (${Math.round(listing.priceMultiplier * 100)}% of new)`,
+                () => {
+                    if (purchaseUsedAircraft(id)) {
+                        renderUsedMarket();
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
+        });
+    });
+
+    usedDiv.querySelectorAll('[data-lease-used]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.leaseUsed);
+            const listing = market.listings.find(l => l.id === id);
+            if (!listing) return;
+            const deposit = listing.leasePrice * LEASE_DEPOSIT_MONTHS;
+            showConfirm(
+                'Lease Used Aircraft',
+                `<strong>${listing.type}</strong> (${listing.category})<br>` +
+                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                `Lease: <strong>$${formatMoney(listing.leasePrice)}/month</strong><br>` +
+                `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong>`,
+                () => {
+                    if (leaseUsedAircraft(id)) {
+                        renderUsedMarket();
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
+        });
+    });
+}
+
 function renderRoutesPanel(container) {
     const state = getState();
 
     container.innerHTML = `
         <div class="panel-header">
             <h2>Route Network</h2>
-            <button class="btn-accent" id="route-create-btn">Create Route</button>
+            <div>
+                <button class="btn-sm" id="route-airports-btn" style="margin-right:6px;">Airports</button>
+                <button class="btn-accent" id="route-create-btn">Create Route</button>
+            </div>
         </div>
         <div id="route-creator" class="route-creator hidden"></div>
+        <div id="route-airports-panel" class="hidden" style="margin-bottom:16px;"></div>
         <div id="route-list" class="route-list"></div>
     `;
 
@@ -338,6 +458,79 @@ function renderRoutesPanel(container) {
         creator.classList.toggle('hidden');
         if (!creator.classList.contains('hidden')) renderRouteCreator();
     });
+
+    document.getElementById('route-airports-btn').addEventListener('click', () => {
+        const panel = document.getElementById('route-airports-panel');
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) renderAirportsSubPanel();
+    });
+}
+
+function renderAirportsSubPanel() {
+    const state = getState();
+    const panel = document.getElementById('route-airports-panel');
+    if (!panel) return;
+
+    // Gather all airports the player operates at
+    const airportSet = new Set();
+    airportSet.add(state.config.hubAirport);
+    for (const route of state.routes) {
+        if (route.active) {
+            airportSet.add(route.origin);
+            airportSet.add(route.destination);
+        }
+    }
+
+    const airportData = [];
+    for (const iata of airportSet) {
+        const ap = getAirportByIata(iata);
+        if (!ap) continue;
+        const level = getSlotControlLevel(iata);
+        const levelInfo = SLOT_CONTROL_LEVELS[level];
+        const playerRoutes = state.routes.filter(r => r.active && (r.origin === iata || r.destination === iata));
+        const playerSchedules = state.schedules.filter(s => {
+            const route = getRouteById(s.routeId);
+            return route && route.active && (route.origin === iata || route.destination === iata);
+        });
+        const dailyDeps = playerSchedules.reduce((sum, s) => {
+            const route = getRouteById(s.routeId);
+            if (route && route.origin === iata) return sum + s.departureTimes.length;
+            return sum;
+        }, 0);
+        const dailyArrs = playerSchedules.reduce((sum, s) => {
+            const route = getRouteById(s.routeId);
+            if (route && route.destination === iata) return sum + s.departureTimes.length;
+            return sum;
+        }, 0);
+
+        const slotUsage = getSlotUsageForAirport(iata);
+        const isHub = iata === state.config.hubAirport;
+
+        airportData.push({ iata, ap, level, levelInfo, playerRoutes, dailyDeps, dailyArrs, slotUsage, isHub, slotsPerHour: ap.slotsPerHour });
+    }
+
+    airportData.sort((a, b) => b.level - a.level || b.playerRoutes.length - a.playerRoutes.length);
+
+    panel.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:6px;padding:14px;">
+            <h3 class="section-title" style="margin-top:0;">Airports (${airportData.length})</h3>
+            ${airportData.map(d => {
+                const levelColor = d.level >= 4 ? 'var(--accent-red)' : d.level === 3 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+                const peakUsage = Object.values(d.slotUsage).length > 0 ? Math.max(...Object.values(d.slotUsage)) : 0;
+                const availPct = d.slotsPerHour > 0 ? Math.round((1 - peakUsage / d.slotsPerHour) * 100) : 100;
+                return `
+                    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-color);font-size:13px;">
+                        <span style="font-family:var(--font-mono);font-weight:700;color:var(--accent-blue);min-width:36px;">${d.iata}</span>
+                        <span style="color:${levelColor};font-family:var(--font-mono);font-size:11px;min-width:80px;">L${d.level} ${d.levelInfo.name}</span>
+                        <span style="color:var(--text-secondary);min-width:70px;">${d.dailyDeps} dep/${d.dailyArrs} arr</span>
+                        <span style="color:var(--text-muted);min-width:80px;">${d.slotsPerHour} slots/hr</span>
+                        ${d.level >= 4 ? `<span style="color:${availPct < 20 ? 'var(--accent-red)' : 'var(--accent-yellow)'};font-family:var(--font-mono);font-size:11px;">${availPct}% avail</span>` : ''}
+                        ${d.isHub ? '<span style="color:var(--accent-blue);font-family:var(--font-mono);font-size:10px;background:rgba(0,170,255,0.1);padding:1px 6px;border-radius:3px;">HUB</span>' : ''}
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
 }
 
 function renderRouteCreator() {
@@ -359,6 +552,10 @@ function renderRouteCreator() {
                 <input type="hidden" id="rc-dest-iata" />
             </div>
             <div id="rc-info" class="route-info hidden"></div>
+            <label class="mc-option" style="margin:8px 0;">
+                <input type="checkbox" id="rc-return-route" checked />
+                <span>Also create return route</span>
+            </label>
             <button class="btn-accent" id="rc-confirm">Create Route</button>
         </div>
     `;
@@ -373,6 +570,10 @@ function renderRouteCreator() {
 
         const route = createRoute(origin, dest);
         if (route) {
+            const createReturn = document.getElementById('rc-return-route').checked;
+            if (createReturn) {
+                createRoute(dest, origin);
+            }
             renderRouteList();
             renderMap();
             updateHUD();
@@ -397,12 +598,27 @@ function updateRouteInfo() {
     const baseFare = calculateBaseFare(distance);
     const competitors = getAICompetitorsOnRoute(origin, dest);
 
+    const originLevel = getSlotControlLevel(origin);
+    const destLevel = getSlotControlLevel(dest);
+    const originSlotInfo = SLOT_CONTROL_LEVELS[originLevel];
+    const destSlotInfo = SLOT_CONTROL_LEVELS[destLevel];
+    const originSlotCost = getSlotCost(origin);
+    const returnCheckbox = document.getElementById('rc-return-route');
+    const wantsReturn = returnCheckbox ? returnCheckbox.checked : false;
+    const destSlotCost = wantsReturn ? getSlotCost(dest) : 0;
+    const totalSlotCost = originSlotCost + destSlotCost;
+
     infoDiv.classList.remove('hidden');
     infoDiv.innerHTML = `
         <div class="route-info-grid">
             <div><span>Distance:</span> ${Math.round(distance).toLocaleString()} km</div>
             <div><span>Base Fare:</span> $${baseFare.toFixed(0)}</div>
             <div><span>AI Competitors:</span> ${competitors.length}</div>
+        </div>
+        <div class="route-info-grid" style="margin-top:6px;">
+            <div><span>Origin slots:</span> L${originLevel} ${originSlotInfo.name}</div>
+            <div><span>Dest slots:</span> L${destLevel} ${destSlotInfo.name}</div>
+            ${totalSlotCost > 0 ? `<div><span>Slot fee:</span> $${formatMoney(totalSlotCost)} (one-time)</div>` : ''}
         </div>
     `;
 }
@@ -507,6 +723,10 @@ function renderSchedulePanel(container) {
                 <button class="btn-secondary" id="bank-create-btn">New Bank</button>
             </div>
         </div>
+        <div class="sched-mode-toggle">
+            <button class="btn-sm sched-mode-btn active" data-smode="simple">Simple</button>
+            <button class="btn-sm sched-mode-btn" data-smode="ops">Ops</button>
+        </div>
         <div id="sched-creator" class="sched-creator hidden"></div>
         <div id="bank-creator" class="bank-creator hidden"></div>
 
@@ -516,6 +736,13 @@ function renderSchedulePanel(container) {
         <h3 class="section-title">Schedules</h3>
         <div id="sched-list"></div>
     `;
+
+    container.querySelectorAll('.sched-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            container.querySelectorAll('.sched-mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
 
     renderBankList();
     renderScheduleList();
@@ -616,10 +843,24 @@ function renderScheduleCreator() {
                 <label>Aircraft</label>
                 <select id="sc-aircraft">
                     <option value="">Select aircraft...</option>
-                    ${state.fleet.map(ac => `<option value="${ac.id}">${ac.registration} — ${ac.type} (${ac.status})</option>`).join('')}
+                    ${state.fleet.map(ac => {
+                        const statusLabel = ac.status === 'available' ? '\u2705 Available'
+                            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
+                            : '\uD83D\uDFE1 Busy';
+                        let nextFreeLabel = '';
+                        if (ac.status === 'in_flight') {
+                            const nextFree = getAircraftNextFree(ac.id);
+                            if (nextFree != null) {
+                                const gt = getGameTime(nextFree);
+                                nextFreeLabel = ` \u2014 Free at D${((gt.week - 1) * 7 + gt.day)} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+                            }
+                        }
+                        return `<option value="${ac.id}">${ac.registration} \u2014 ${ac.type} [${statusLabel}${nextFreeLabel}]</option>`;
+                    }).join('')}
                 </select>
             </div>
             <div id="sc-range-check" class="range-check hidden"></div>
+            <div id="sc-aircraft-warning" class="range-check hidden"></div>
             <div class="form-row">
                 <label>Mode</label>
                 <select id="sc-mode">
@@ -660,7 +901,8 @@ function renderScheduleCreator() {
     function checkRange() {
         const routeId = parseInt(routeSelect.value);
         const acId = parseInt(aircraftSelect.value);
-        if (!routeId || !acId) { rangeCheck.classList.add('hidden'); return; }
+        const acWarning = document.getElementById('sc-aircraft-warning');
+        if (!routeId || !acId) { rangeCheck.classList.add('hidden'); if (acWarning) acWarning.classList.add('hidden'); return; }
         const route = getRouteById(routeId);
         const aircraft = state.fleet.find(f => f.id === acId);
         if (!route || !aircraft) return;
@@ -669,11 +911,30 @@ function renderScheduleCreator() {
         const blockTime = calculateBlockTime(route.distance, aircraft.type);
         rangeCheck.classList.remove('hidden');
         if (can) {
+            const turnaround = getTurnaroundTime(aircraft.type);
             rangeCheck.className = 'range-check ok';
-            rangeCheck.textContent = `Range OK (${acData.rangeKm}km >= ${route.distance}km). Block time: ${Math.floor(blockTime/60)}h ${blockTime%60}m`;
+            rangeCheck.textContent = `Range OK (${acData.rangeKm}km \u2265 ${route.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
         } else {
             rangeCheck.className = 'range-check fail';
             rangeCheck.textContent = `Out of range! ${acData.rangeKm}km < ${route.distance}km`;
+        }
+
+        if (acWarning) {
+            if (aircraft.status === 'in_flight') {
+                const nextFree = getAircraftNextFree(aircraft.id);
+                if (nextFree != null) {
+                    const gt = getGameTime(nextFree);
+                    acWarning.classList.remove('hidden');
+                    acWarning.className = 'range-check fail';
+                    acWarning.textContent = `${aircraft.registration} is busy until Day ${(gt.week - 1) * 7 + gt.day} \u2014 ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}. Schedule will only activate when aircraft is free.`;
+                }
+            } else if (aircraft.status === 'maintenance') {
+                acWarning.classList.remove('hidden');
+                acWarning.className = 'range-check fail';
+                acWarning.textContent = `${aircraft.registration} is in maintenance. Schedule will activate when maintenance completes.`;
+            } else {
+                acWarning.classList.add('hidden');
+            }
         }
     }
 
@@ -743,6 +1004,7 @@ function renderScheduleList() {
                 </div>
                 <div class="sched-card-details">
                     <span>Block time: ${Math.floor(sched.blockTimeMinutes / 60)}h ${sched.blockTimeMinutes % 60}m</span>
+                    <span>Turnaround: ${aircraft ? getTurnaroundTime(aircraft.type) : '?'}m</span>
                     <span>Departures: ${times || 'None'}</span>
                 </div>
                 <div class="sched-card-actions">
@@ -765,6 +1027,7 @@ function renderFinancesPanel(container) {
 
     const recentFlights = state.flights.completed.slice(-20).reverse();
     const pnlData = state.finances.monthlyPnL.slice(-12).reverse();
+    const dailyData = state.finances.dailyPnL || [];
 
     container.innerHTML = `
         <div class="panel-header"><h2>Finances</h2></div>
@@ -785,6 +1048,33 @@ function renderFinancesPanel(container) {
                 <div class="dash-card-label">Net P&L</div>
                 <div class="dash-card-value ${state.finances.totalRevenue - state.finances.totalCosts < 0 ? 'negative' : ''}">$${formatMoney(Math.abs(state.finances.totalRevenue - state.finances.totalCosts))}</div>
             </div>
+        </div>
+
+        <h3 class="section-title">Daily P&L (Last 30 Days)</h3>
+        <div class="finance-chart-container">
+            ${dailyData.length === 0 ? '<div class="empty-state-sm">No daily data yet. Complete a full day of operations.</div>' : `
+                <canvas id="daily-pnl-chart" width="800" height="200"></canvas>
+            `}
+        </div>
+
+        <h3 class="section-title">Running Cash Balance</h3>
+        <div class="table-container" style="margin-bottom:16px;">
+            ${dailyData.length === 0 ? '<div class="empty-state-sm">No daily data yet.</div>' : `
+                <table class="data-table">
+                    <thead><tr><th>Day</th><th>Revenue</th><th>Costs</th><th>Net</th><th>Cash</th></tr></thead>
+                    <tbody>
+                        ${dailyData.slice(-10).reverse().map(d => `
+                            <tr>
+                                <td>${d.dayLabel}</td>
+                                <td>$${formatMoney(d.revenue)}</td>
+                                <td>$${formatMoney(d.costs)}</td>
+                                <td class="${d.profit >= 0 ? '' : 'negative'}">${d.profit >= 0 ? '+' : '-'}$${formatMoney(Math.abs(d.profit))}</td>
+                                <td>$${formatMoney(d.cashBalance)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `}
         </div>
 
         <h3 class="section-title">Monthly P&L</h3>
@@ -828,6 +1118,80 @@ function renderFinancesPanel(container) {
             `}
         </div>
     `;
+
+    // Render daily P&L bar chart
+    if (dailyData.length > 0) {
+        renderDailyPnLChart(dailyData.slice(-30));
+    }
+}
+
+function renderDailyPnLChart(data) {
+    const canvas = document.getElementById('daily-pnl-chart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width - 28;
+    canvas.height = 200;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const padding = { top: 20, right: 10, bottom: 30, left: 60 };
+    const chartW = w - padding.left - padding.right;
+    const chartH = h - padding.top - padding.bottom;
+
+    // Clear
+    ctx.fillStyle = '#0d1120';
+    ctx.fillRect(0, 0, w, h);
+
+    if (data.length === 0) return;
+
+    const profits = data.map(d => d.profit);
+    const maxVal = Math.max(...profits.map(Math.abs), 1);
+
+    const barWidth = Math.max(4, (chartW / data.length) - 2);
+    const gap = (chartW - barWidth * data.length) / (data.length + 1);
+
+    // Zero line
+    const zeroY = padding.top + chartH / 2;
+    ctx.strokeStyle = '#2a3a5c';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, zeroY);
+    ctx.lineTo(w - padding.right, zeroY);
+    ctx.stroke();
+
+    // Y-axis labels
+    ctx.fillStyle = '#556078';
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('+$' + formatMoney(maxVal), padding.left - 6, padding.top + 10);
+    ctx.fillText('$0', padding.left - 6, zeroY + 4);
+    ctx.fillText('-$' + formatMoney(maxVal), padding.left - 6, h - padding.bottom - 2);
+
+    // Bars
+    for (let i = 0; i < data.length; i++) {
+        const x = padding.left + gap + i * (barWidth + gap);
+        const profit = data[i].profit;
+        const barH = (Math.abs(profit) / maxVal) * (chartH / 2);
+
+        if (profit >= 0) {
+            ctx.fillStyle = '#00e676';
+            ctx.fillRect(x, zeroY - barH, barWidth, barH);
+        } else {
+            ctx.fillStyle = '#ff4444';
+            ctx.fillRect(x, zeroY, barWidth, barH);
+        }
+
+        // Day label (show every few bars to avoid overlap)
+        if (data.length <= 15 || i % Math.ceil(data.length / 10) === 0) {
+            ctx.fillStyle = '#556078';
+            ctx.font = '9px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            const label = data[i].dayLabel.split(' ').pop();
+            ctx.fillText(label, x + barWidth / 2, h - padding.bottom + 14);
+        }
+    }
 }
 
 function renderLogPanel(container) {

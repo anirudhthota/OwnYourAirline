@@ -1,6 +1,6 @@
 import { getState, addLogEntry } from './state.js';
 import { getRouteById, calculateBlockTime, canAircraftFlyRoute } from './routeEngine.js';
-import { getAircraftByType } from '../data/aircraft.js';
+import { getAircraftByType, getTurnaroundTime } from '../data/aircraft.js';
 
 export const SCHEDULE_MODE = {
     CUSTOM: 'CUSTOM',
@@ -93,6 +93,26 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
     }
 
     const blockTime = calculateBlockTime(route.distance, aircraft.type);
+    const turnaround = getTurnaroundTime(aircraft.type);
+
+    if (times.length > 1) {
+        const sortedMinutes = times.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
+        for (let i = 1; i < sortedMinutes.length; i++) {
+            const gap = sortedMinutes[i] - sortedMinutes[i - 1];
+            const needed = blockTime + turnaround;
+            if (gap < needed) {
+                const arrH = Math.floor((sortedMinutes[i - 1] + blockTime) / 60) % 24;
+                const arrM = (sortedMinutes[i - 1] + blockTime) % 60;
+                const earliestH = Math.floor((sortedMinutes[i - 1] + needed) / 60) % 24;
+                const earliestM = (sortedMinutes[i - 1] + needed) % 60;
+                addLogEntry(
+                    `Insufficient turnaround. ${aircraft.registration} arrives at ${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')} and needs ${turnaround} min ground time. Earliest next departure: ${String(earliestH).padStart(2, '0')}:${String(earliestM).padStart(2, '0')}.`,
+                    'error'
+                );
+                return null;
+            }
+        }
+    }
 
     const schedule = {
         id: state.nextScheduleId++,
@@ -190,6 +210,16 @@ export function getSchedulesByRoute(routeId) {
 export function getSchedulesByAircraft(aircraftId) {
     const state = getState();
     return state.schedules.filter(s => s.aircraftId === aircraftId);
+}
+
+export function calculateMinAircraft(routeDistance, aircraftType, frequency) {
+    const blockTime = calculateBlockTime(routeDistance, aircraftType);
+    const turnaround = getTurnaroundTime(aircraftType);
+    const cycleTime = (blockTime * 2) + (turnaround * 2);
+    const operatingDay = 1440;
+    const slotsPerAircraft = Math.floor(operatingDay / cycleTime);
+    if (slotsPerAircraft <= 0) return frequency;
+    return Math.ceil(frequency / slotsPerAircraft);
 }
 
 function formatBankTime(t) {

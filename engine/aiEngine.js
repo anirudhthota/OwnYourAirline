@@ -155,3 +155,10 @@ export function getAICompetitorsOnRoute(origin, destination) {
         (r.origin === destination && r.destination === origin)
     );
 }
+
+export function getAICompetitorsOnDirectionalRoute(origin, destination) {
+    const state = getState();
+    return state.ai.routes.filter(r =>
+        r.origin === origin && r.destination === destination
+    );
+}

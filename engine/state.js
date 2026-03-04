@@ -80,6 +80,11 @@ export function createInitialState(config) {
             monthlyRevenue: 0,
             monthlyCosts: 0,
             monthlyPnL: [],
+            dailyRevenue: 0,
+            dailyCosts: 0,
+            dailyPnL: [],
+            dailyFlights: 0,
+            dailyPassengers: 0,
             godMode: false
         },
 
@@ -99,6 +104,13 @@ export function createInitialState(config) {
         },
 
         slots: {},
+        delayedFlights: [],
+
+        usedMarket: {
+            listings: [],
+            lastRefreshDay: 0,
+            nextListingId: 1
+        },
 
         banks: [],
         nextBankId: 1,
@@ -156,6 +168,7 @@ export function deductCash(amount, description) {
     gameState.finances.cash -= amount;
     gameState.finances.totalCosts += amount;
     gameState.finances.monthlyCosts += amount;
+    gameState.finances.dailyCosts += amount;
     addLogEntry(`${description}: -$${formatMoney(amount)}`, 'finance');
     return true;
 }
@@ -165,6 +178,7 @@ export function addCash(amount, description) {
     gameState.finances.cash += amount;
     gameState.finances.totalRevenue += amount;
     gameState.finances.monthlyRevenue += amount;
+    gameState.finances.dailyRevenue += amount;
     addLogEntry(`${description}: +$${formatMoney(amount)}`, 'finance');
 }
 

@@ -302,3 +302,32 @@ export function getDistanceBetweenAirports(iata1, iata2) {
     if (!a1 || !a2) return null;
     return haversineDistance(a1.lat, a1.lon, a2.lat, a2.lon);
 }
+
+export const SLOT_CONTROL_LEVELS = {
+    1: { name: 'Uncontrolled', description: 'No slot limits enforced', costPerSlot: 0 },
+    2: { name: 'Voluntary', description: 'Soft limits, rarely enforced', costPerSlot: 0 },
+    3: { name: 'Coordinated', description: 'Limited slots, must hold a slot', costPerSlot: 50000 },
+    4: { name: 'Fully Coordinated', description: 'Strict limits, slots are scarce', costPerSlot: 200000 },
+    5: { name: 'Slot-Controlled', description: 'Extremely limited, very expensive', costPerSlot: 500000 }
+};
+
+const LEVEL_5_AIRPORTS = new Set(['LHR', 'JFK', 'NRT', 'CDG', 'HND']);
+const LEVEL_4_AIRPORTS = new Set(['DXB', 'SIN', 'FRA', 'AMS', 'IST']);
+const LEVEL_3_AIRPORTS = new Set([
+    'DEL', 'BOM', 'DFW', 'LAX', 'ORD', 'ATL'
+]);
+
+export function getSlotControlLevel(iata) {
+    if (LEVEL_5_AIRPORTS.has(iata)) return 5;
+    if (LEVEL_4_AIRPORTS.has(iata)) return 4;
+    if (LEVEL_3_AIRPORTS.has(iata)) return 3;
+    const airport = getAirportByIata(iata);
+    if (!airport) return 1;
+    if (airport.slotsPerHour >= 60) return 2;
+    return 1;
+}
+
+export function getSlotCost(iata) {
+    const level = getSlotControlLevel(iata);
+    return SLOT_CONTROL_LEVELS[level].costPerSlot;
+}

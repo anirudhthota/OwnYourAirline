@@ -204,6 +204,19 @@ export function getAircraftByCategory(category) {
     return AIRCRAFT_TYPES.filter(a => a.category === category);
 }
 
+export const TURNAROUND_MINUTES = {
+    'Regional': 25,
+    'Narrow-body': 45,
+    'Wide-body': 90,
+    'Super Heavy': 120
+};
+
+export function getTurnaroundTime(aircraftType) {
+    const ac = getAircraftByType(aircraftType);
+    if (!ac) return 45;
+    return TURNAROUND_MINUTES[ac.category] || 45;
+}
+
 export const FUEL_COST_PER_KG = 0.85;
 export const CREW_COST_PER_FLIGHT_HOUR = 450;
 export const AIRPORT_FEE_PER_DEPARTURE = 2500;

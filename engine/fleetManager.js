@@ -1,5 +1,5 @@
-import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR } from './state.js';
-import { getAircraftByType, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
+import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR, MINUTES_PER_DAY } from './state.js';
+import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
 import { getSchedulesByAircraft } from './scheduler.js';
 
 export const OWNERSHIP_TYPE = {
@@ -156,6 +156,13 @@ function generateRegistration(state) {
     return `${prefix}-${num}`;
 }
 
+export function getAircraftNextFree(aircraftId) {
+    const state = getState();
+    const flight = state.flights.active.find(f => f.aircraftId === aircraftId);
+    if (!flight) return null;
+    return flight.arrivalTime;
+}
+
 export function getFleetSummary() {
     const state = getState();
     const summary = {};
@@ -170,4 +177,155 @@ export function getFleetSummary() {
         if (aircraft.ownership === OWNERSHIP_TYPE.LEASED) summary[aircraft.type].leased++;
     }
     return summary;
+}
+
+// ===== Used Aircraft Market =====
+
+export function generateUsedMarketListings(includeDiscountA321) {
+    const state = getState();
+    const market = state.usedMarket;
+    market.listings = [];
+
+    const count = 3 + Math.floor(Math.random() * 3); // 3-5 aircraft
+    const available = AIRCRAFT_TYPES.filter(a => a.category !== 'Super Heavy');
+
+    for (let i = 0; i < count; i++) {
+        const acData = available[Math.floor(Math.random() * available.length)];
+        market.listings.push(createUsedListing(acData, market));
+    }
+
+    if (includeDiscountA321) {
+        const a321 = getAircraftByType('A321neo');
+        if (a321) {
+            const listing = createUsedListing(a321, market);
+            listing.priceMultiplier = 0.55;
+            listing.price = Math.round(a321.purchasePrice * 0.55);
+            listing.leasePrice = Math.round(a321.leaseCostPerMonth * 0.6);
+            listing.featured = true;
+            market.listings.unshift(listing);
+        }
+    }
+
+    market.lastRefreshDay = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY);
+}
+
+function createUsedListing(acData, market) {
+    const ageYears = 2 + Math.floor(Math.random() * 9); // 2-10 years
+    const hoursFlown = Math.round(ageYears * (1500 + Math.random() * 2000));
+    const priceMultiplier = 0.60 + Math.random() * 0.20; // 60-80%
+    const condition = Math.random() > 0.4 ? 'Good' : 'Fair';
+    const price = Math.round(acData.purchasePrice * priceMultiplier);
+    const leasePrice = Math.round(acData.leaseCostPerMonth * (priceMultiplier + 0.05));
+
+    return {
+        id: market.nextListingId++,
+        type: acData.type,
+        category: acData.category,
+        seats: acData.seats,
+        rangeKm: acData.rangeKm,
+        ageYears,
+        hoursFlown,
+        condition,
+        priceMultiplier,
+        price,
+        leasePrice,
+        featured: false
+    };
+}
+
+export function checkUsedMarketRefresh() {
+    const state = getState();
+    const market = state.usedMarket;
+    const currentDay = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY);
+    if (currentDay - market.lastRefreshDay >= 30) {
+        generateUsedMarketListings(false);
+        addLogEntry('Used aircraft market has refreshed with new listings', 'fleet');
+    }
+}
+
+export function purchaseUsedAircraft(listingId) {
+    const state = getState();
+    const market = state.usedMarket;
+    const listing = market.listings.find(l => l.id === listingId);
+    if (!listing) {
+        addLogEntry('Listing not found in used market', 'error');
+        return null;
+    }
+
+    if (!deductCash(listing.price, `Purchase used ${listing.type} (${listing.ageYears}yr, ${listing.condition})`)) {
+        return null;
+    }
+
+    const aircraft = {
+        id: state.nextFleetId++,
+        type: listing.type,
+        ownership: OWNERSHIP_TYPE.OWNED,
+        purchasePrice: listing.price,
+        purchaseDate: state.clock.totalMinutes,
+        totalFlightHours: listing.hoursFlown,
+        status: 'available',
+        registration: generateRegistration(state),
+        usedAge: listing.ageYears,
+        condition: listing.condition
+    };
+
+    state.fleet.push(aircraft);
+    market.listings = market.listings.filter(l => l.id !== listingId);
+    addLogEntry(`Used aircraft purchased: ${listing.type} (${aircraft.registration}), ${listing.ageYears}yr old, ${listing.condition}`, 'fleet');
+    return aircraft;
+}
+
+export function leaseUsedAircraft(listingId) {
+    const state = getState();
+    const market = state.usedMarket;
+    const listing = market.listings.find(l => l.id === listingId);
+    if (!listing) {
+        addLogEntry('Listing not found in used market', 'error');
+        return null;
+    }
+
+    const deposit = listing.leasePrice * LEASE_DEPOSIT_MONTHS;
+    if (!deductCash(deposit, `Lease deposit for used ${listing.type} (${LEASE_DEPOSIT_MONTHS} months)`)) {
+        return null;
+    }
+
+    const aircraft = {
+        id: state.nextFleetId++,
+        type: listing.type,
+        ownership: OWNERSHIP_TYPE.LEASED,
+        leaseCostPerMonth: listing.leasePrice,
+        leaseStartDate: state.clock.totalMinutes,
+        depositPaid: deposit,
+        totalFlightHours: listing.hoursFlown,
+        status: 'available',
+        registration: generateRegistration(state),
+        usedAge: listing.ageYears,
+        condition: listing.condition
+    };
+
+    state.fleet.push(aircraft);
+    market.listings = market.listings.filter(l => l.id !== listingId);
+    addLogEntry(`Used aircraft leased: ${listing.type} (${aircraft.registration}), $${formatMoney(listing.leasePrice)}/mo`, 'fleet');
+    return aircraft;
+}
+
+export function addFreeAircraftToFleet(aircraftType) {
+    const state = getState();
+    const acData = getAircraftByType(aircraftType);
+    if (!acData) return null;
+
+    const aircraft = {
+        id: state.nextFleetId++,
+        type: acData.type,
+        ownership: OWNERSHIP_TYPE.OWNED,
+        purchasePrice: 0,
+        purchaseDate: state.clock.totalMinutes,
+        totalFlightHours: 0,
+        status: 'available',
+        registration: generateRegistration(state)
+    };
+
+    state.fleet.push(aircraft);
+    addLogEntry(`Starter aircraft added: ${acData.type} (${aircraft.registration})`, 'fleet');
+    return aircraft;
 }
