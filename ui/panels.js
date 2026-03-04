@@ -4,7 +4,8 @@ import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports } from '../data/
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
-import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft } from '../engine/scheduler.js';
+import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft } from '../engine/scheduler.js';
+import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
 import { updateHUD } from './hud.js';
 import { renderMap } from './map.js';
@@ -704,8 +705,9 @@ function renderScheduleCreator() {
         const blockTime = calculateBlockTime(route.distance, aircraft.type);
         rangeCheck.classList.remove('hidden');
         if (can) {
+            const turnaround = getTurnaroundTime(aircraft.type);
             rangeCheck.className = 'range-check ok';
-            rangeCheck.textContent = `Range OK (${acData.rangeKm}km >= ${route.distance}km). Block time: ${Math.floor(blockTime/60)}h ${blockTime%60}m`;
+            rangeCheck.textContent = `Range OK (${acData.rangeKm}km \u2265 ${route.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
         } else {
             rangeCheck.className = 'range-check fail';
             rangeCheck.textContent = `Out of range! ${acData.rangeKm}km < ${route.distance}km`;
@@ -796,6 +798,7 @@ function renderScheduleList() {
                 </div>
                 <div class="sched-card-details">
                     <span>Block time: ${Math.floor(sched.blockTimeMinutes / 60)}h ${sched.blockTimeMinutes % 60}m</span>
+                    <span>Turnaround: ${aircraft ? getTurnaroundTime(aircraft.type) : '?'}m</span>
                     <span>Departures: ${times || 'None'}</span>
                 </div>
                 <div class="sched-card-actions">
