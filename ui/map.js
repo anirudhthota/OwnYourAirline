@@ -482,11 +482,28 @@ function drawPlayerRoutes() {
     ctx.lineWidth = 2;
     ctx.globalAlpha = 0.85;
 
+    const pairsSeen = new Set();
+
     for (const route of state.routes) {
         if (!route.active) continue;
         const origin = getAirportByIata(route.origin);
         const dest = getAirportByIata(route.destination);
         if (!origin || !dest) continue;
+
+        const pairKey = [route.origin, route.destination].sort().join('-');
+        const hasReverse = state.routes.some(r =>
+            r.active && r.origin === route.destination && r.destination === route.origin
+        );
+
+        let offsetDir = 0;
+        if (hasReverse) {
+            if (pairsSeen.has(pairKey)) {
+                offsetDir = -1;
+            } else {
+                offsetDir = 1;
+                pairsSeen.add(pairKey);
+            }
+        }
 
         ctx.strokeStyle = state.config.airlineColor;
         ctx.shadowColor = state.config.airlineColor;
@@ -494,20 +511,27 @@ function drawPlayerRoutes() {
 
         const p1 = geoToScreen(origin.lat, origin.lon);
         const p2 = geoToScreen(dest.lat, dest.lon);
-        drawArc(p1, p2);
+        drawArcOffset(p1, p2, offsetDir);
     }
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 }
 
 function drawArc(p1, p2) {
+    drawArcOffset(p1, p2, 0);
+}
+
+function drawArcOffset(p1, p2, offsetDir) {
     const midX = (p1.x + p2.x) / 2;
     const midY = (p1.y + p2.y) / 2;
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 1) return;
-    const bulge = dist * 0.15;
+
+    const baseBulge = dist * 0.15;
+    const offsetAmount = offsetDir * dist * 0.06;
+    const bulge = baseBulge + offsetAmount;
 
     const cpX = midX - (dy / dist) * bulge;
     const cpY = midY + (dx / dist) * bulge;

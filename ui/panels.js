@@ -359,6 +359,10 @@ function renderRouteCreator() {
                 <input type="hidden" id="rc-dest-iata" />
             </div>
             <div id="rc-info" class="route-info hidden"></div>
+            <label class="mc-option" style="margin:8px 0;">
+                <input type="checkbox" id="rc-return-route" checked />
+                <span>Also create return route</span>
+            </label>
             <button class="btn-accent" id="rc-confirm">Create Route</button>
         </div>
     `;
@@ -373,6 +377,10 @@ function renderRouteCreator() {
 
         const route = createRoute(origin, dest);
         if (route) {
+            const createReturn = document.getElementById('rc-return-route').checked;
+            if (createReturn) {
+                createRoute(dest, origin);
+            }
             renderRouteList();
             renderMap();
             updateHUD();

@@ -18,11 +18,10 @@ export function createRoute(originIata, destinationIata) {
     }
 
     const existing = state.routes.find(r =>
-        (r.origin === originIata && r.destination === destinationIata) ||
-        (r.origin === destinationIata && r.destination === originIata)
+        r.origin === originIata && r.destination === destinationIata
     );
     if (existing) {
-        addLogEntry(`Route ${originIata}-${destinationIata} already exists`, 'warning');
+        addLogEntry(`Route ${originIata} \u2192 ${destinationIata} already exists`, 'warning');
         return null;
     }
 
