@@ -5,6 +5,7 @@ import { setGameSpeed } from './engine/sim.js';
 import { createHUD, updateHUD } from './ui/hud.js';
 import { initMap, renderMap } from './ui/map.js';
 import { initSideNav, showPanel } from './ui/panels.js';
+import { showDailyPnLNotification } from './ui/dailyPnl.js';
 
 function boot() {
     const app = document.getElementById('app');
@@ -64,7 +65,7 @@ function launchGame() {
 
     setGameSpeed(GAME_SPEEDS.PAUSED);
 
-    startSimulation(onTick, onMonth);
+    startSimulation(onTick, onMonth, onDayEnd);
 
     initKeyboardInput();
 }
@@ -86,6 +87,16 @@ function onTick() {
 }
 
 function onMonth() {
+    const state = getState();
+    if (state.ui.selectedPanel === 'finances') {
+        showPanel('finances');
+    }
+}
+
+function onDayEnd(dailyRecord) {
+    if (dailyRecord.flights > 0) {
+        showDailyPnLNotification(dailyRecord);
+    }
     const state = getState();
     if (state.ui.selectedPanel === 'finances') {
         showPanel('finances');

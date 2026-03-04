@@ -1405,3 +1405,113 @@ html, body {
         grid-template-columns: 1fr;
     }
 }
+
+/* ===== Daily P&L Notification ===== */
+.daily-pnl-notification {
+    position: fixed;
+    top: 60px;
+    right: -340px;
+    width: 320px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-accent);
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    z-index: 9000;
+    font-family: var(--font-body);
+    transition: right 0.3s ease;
+}
+
+.daily-pnl-notification.visible {
+    right: 16px;
+}
+
+.dpnl-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dpnl-title {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--accent-blue);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.dpnl-day {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-left: auto;
+}
+
+.dpnl-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+}
+
+.dpnl-close:hover {
+    color: var(--text-primary);
+}
+
+.dpnl-body {
+    padding: 10px 14px;
+}
+
+.dpnl-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 13px;
+}
+
+.dpnl-label {
+    color: var(--text-secondary);
+}
+
+.dpnl-value {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+.dpnl-value.positive {
+    color: var(--accent-green);
+}
+
+.dpnl-value.negative {
+    color: var(--accent-red);
+}
+
+.dpnl-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 6px 0;
+}
+
+.dpnl-total {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+/* ===== Finance Chart ===== */
+.finance-chart-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.finance-chart-container canvas {
+    width: 100%;
+    height: 200px;
+    display: block;
+}

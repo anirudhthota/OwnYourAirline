@@ -7,9 +7,11 @@ import { monthlyAIExpansion } from './aiEngine.js';
 
 let tickCallback = null;
 let monthCallback = null;
+let dayEndCallback = null;
 
 export function setTickCallback(cb) { tickCallback = cb; }
 export function setMonthCallback(cb) { monthCallback = cb; }
+export function setDayEndCallback(cb) { dayEndCallback = cb; }
 
 export function setGameSpeed(speed) {
     const state = getState();
@@ -38,6 +40,12 @@ export function tick() {
     processFlightDepartures();
     processActiveFlights();
     processSlotUsage();
+
+    const prevDay = Math.floor(prevTotalMinutes / MINUTES_PER_DAY);
+    const currDay = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY);
+    if (currDay !== prevDay) {
+        processDayEnd(prevTotalMinutes);
+    }
 
     const prevMonth = Math.floor(prevTotalMinutes / MINUTES_PER_MONTH);
     const currMonth = Math.floor(state.clock.totalMinutes / MINUTES_PER_MONTH);
@@ -169,6 +177,8 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes) {
 
     state.flights.active.push(flight);
     aircraft.status = 'in_flight';
+    state.finances.dailyFlights++;
+    state.finances.dailyPassengers += passengers;
 
     const delayNote = delayMinutes > 0 ? ` (delayed ${delayMinutes}min)` : '';
     deductCash(cost, `Flight ${route.origin}→${route.destination} (${aircraft.registration})${delayNote}`);
@@ -270,6 +280,59 @@ export function getSlotUsageForAirport(airportIata) {
         }
     }
     return usage;
+}
+
+function processDayEnd(prevTotalMinutes) {
+    const state = getState();
+    const gt = getGameTime(prevTotalMinutes);
+    const dayLabel = `Y${gt.year} M${gt.month} W${gt.week} D${gt.day}`;
+
+    // Calculate best/worst performing route today
+    const routeProfits = {};
+    for (const flight of state.flights.completed) {
+        // Only count flights from today (departed during the day that just ended)
+        const flightDay = Math.floor(flight.departureTime / MINUTES_PER_DAY);
+        const prevDay = Math.floor(prevTotalMinutes / MINUTES_PER_DAY);
+        if (flightDay !== prevDay) continue;
+        const key = `${flight.origin}→${flight.destination}`;
+        if (!routeProfits[key]) routeProfits[key] = 0;
+        routeProfits[key] += flight.profit;
+    }
+
+    let bestRoute = null;
+    let worstRoute = null;
+    let bestProfit = -Infinity;
+    let worstProfit = Infinity;
+    for (const [route, profit] of Object.entries(routeProfits)) {
+        if (profit > bestProfit) { bestProfit = profit; bestRoute = route; }
+        if (profit < worstProfit) { worstProfit = profit; worstRoute = route; }
+    }
+
+    const dailyRecord = {
+        dayLabel,
+        totalMinutes: prevTotalMinutes,
+        flights: state.finances.dailyFlights,
+        passengers: state.finances.dailyPassengers,
+        revenue: state.finances.dailyRevenue,
+        costs: state.finances.dailyCosts,
+        profit: state.finances.dailyRevenue - state.finances.dailyCosts,
+        bestRoute: bestRoute ? { route: bestRoute, profit: bestProfit } : null,
+        worstRoute: worstRoute ? { route: worstRoute, profit: worstProfit } : null,
+        cashBalance: state.finances.cash
+    };
+
+    state.finances.dailyPnL.push(dailyRecord);
+    if (state.finances.dailyPnL.length > 90) {
+        state.finances.dailyPnL.shift();
+    }
+
+    // Reset daily counters
+    state.finances.dailyRevenue = 0;
+    state.finances.dailyCosts = 0;
+    state.finances.dailyFlights = 0;
+    state.finances.dailyPassengers = 0;
+
+    if (dayEndCallback) dayEndCallback(dailyRecord);
 }
 
 function processMonthEnd() {
