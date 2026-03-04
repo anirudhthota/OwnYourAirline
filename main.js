@@ -223,7 +223,8 @@ function toggleSecretPanel() {
                                 purchaseDate: st.clock.totalMinutes,
                                 totalFlightHours: 0,
                                 status: 'available',
-                                registration: `${st.config.iataCode}-${String(st.nextFleetId - 1).padStart(3, '0')}`
+                                registration: `${st.config.iataCode}-${String(st.nextFleetId - 1).padStart(3, '0')}`,
+                                currentLocation: st.config.hubAirport
                             });
                         }
                     }

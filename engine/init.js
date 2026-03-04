@@ -28,6 +28,12 @@ export function initFromSave() {
     if (!state.usedMarket) {
         state.usedMarket = { listings: [], lastRefreshDay: 0, nextListingId: 1 };
     }
+    // Ensure currentLocation exists for older saves
+    for (const ac of state.fleet) {
+        if (!ac.currentLocation) {
+            ac.currentLocation = ac.status === 'in_flight' ? null : state.config.hubAirport;
+        }
+    }
     return state;
 }
 

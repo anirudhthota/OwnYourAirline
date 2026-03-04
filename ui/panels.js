@@ -12,6 +12,14 @@ import { updateHUD } from './hud.js';
 import { renderMap } from './map.js';
 import { showConfirm } from './modals.js';
 
+function formatLocation(ac) {
+    if (!ac.currentLocation) return '';
+    if (ac.currentLocation.startsWith('airborne:')) {
+        return `Airborne: ${ac.currentLocation.slice(9)}`;
+    }
+    return `At ${ac.currentLocation}`;
+}
+
 export function initSideNav() {
     const nav = document.getElementById('side-nav');
     if (!nav) return;
@@ -173,6 +181,7 @@ function renderFleetList() {
                     <button class="fleet-rename-btn" data-rename="${ac.id}" title="Rename tail number">\u270E</button>
                     <span class="fleet-type">${ac.type}</span>
                     <span class="fleet-status status-${ac.status}">${ac.status === 'in_flight' ? 'BUSY' : ac.status.toUpperCase()}</span>
+                    <span class="fleet-location">${formatLocation(ac)}</span>
                 </div>
                 <div class="fleet-card-details">
                     <span>${acData ? acData.seats + ' seats' : ''}</span>
@@ -678,21 +687,69 @@ function renderRouteList() {
         const totalSeats = getTotalDailySeatsOnRoute(route.id);
         const loadFactor = calculateLoadFactor(route, totalSeats);
 
+        // Collect unique aircraft assigned to this route's schedules
+        const assignedAcIds = [...new Set(schedules.map(s => s.aircraftId))];
+        const assignedAircraft = assignedAcIds.map(id => state.fleet.find(f => f.id === id)).filter(Boolean);
+
+        // Calculate minimum aircraft needed for daily service
+        let minAcWarning = '';
+        if (schedules.length > 0) {
+            const firstSched = schedules[0];
+            const ac = state.fleet.find(f => f.id === firstSched.aircraftId);
+            if (ac) {
+                const freq = schedules.reduce((sum, s) => sum + s.departureTimes.length, 0);
+                const minAc = calculateMinAircraft(route.distance, ac.type, freq);
+                if (assignedAcIds.length < minAc) {
+                    minAcWarning = `<div class="route-warning">&#9888; Understaffed \u2014 ${assignedAcIds.length} of ${minAc} required aircraft assigned</div>`;
+                }
+            }
+        }
+
+        // Check for stranding
+        let strandWarning = '';
+        const hasReturn = state.routes.some(r => r.active && r.origin === route.destination && r.destination === route.origin);
+        if (!hasReturn && schedules.length > 0) {
+            for (const ac of assignedAircraft) {
+                const returnSchedules = state.schedules.filter(s =>
+                    s.active && s.aircraftId === ac.id &&
+                    getRouteById(s.routeId)?.origin === route.destination &&
+                    getRouteById(s.routeId)?.destination === route.origin
+                );
+                if (returnSchedules.length === 0) {
+                    strandWarning = `<div class="route-warning">&#9888; ${ac.registration} will be at ${route.destination} with no scheduled return. Add a return leg or assign an additional aircraft.</div>`;
+                    break;
+                }
+            }
+        }
+
         return `
             <div class="route-card">
                 <div class="route-card-header">
-                    <span class="route-pair">${route.origin} ⟶ ${route.destination}</span>
+                    <span class="route-pair">${route.origin} \u27F6 ${route.destination}</span>
                     <span class="route-dist">${route.distance.toLocaleString()} km</span>
                     <span class="route-status ${route.active ? 'active' : 'inactive'}">${route.active ? 'Active' : 'Inactive'}</span>
                 </div>
                 <div class="route-card-details">
-                    <span>${origin ? origin.city : ''} → ${dest ? dest.city : ''}</span>
+                    <span>${origin ? origin.city : ''} \u2192 ${dest ? dest.city : ''}</span>
                     <span>Demand: ${route.demand} pax/day</span>
                     <span>Base fare: $${route.baseFare.toFixed(0)}</span>
                     <span>Schedules: ${schedules.length}</span>
                     <span>Daily seats: ${totalSeats}</span>
                     <span>Load factor: ${(loadFactor * 100).toFixed(0)}%</span>
                 </div>
+                ${assignedAircraft.length > 0 ? `
+                    <div class="route-aircraft-list">
+                        <span class="route-aircraft-label">Aircraft:</span>
+                        ${assignedAircraft.map(ac => `
+                            <span class="route-aircraft-tag">
+                                ${ac.registration} (${ac.type})
+                                <span class="route-ac-loc">${formatLocation(ac)}</span>
+                            </span>
+                        `).join('')}
+                    </div>
+                ` : ''}
+                ${minAcWarning}
+                ${strandWarning}
                 <div class="route-card-actions">
                     <button class="btn-sm btn-danger" data-delete-route="${route.id}">Delete</button>
                 </div>
@@ -909,29 +966,43 @@ function renderScheduleCreator() {
         const can = canAircraftFlyRoute(aircraft.type, route.distance);
         const acData = getAircraftByType(aircraft.type);
         const blockTime = calculateBlockTime(route.distance, aircraft.type);
+        const turnaround = getTurnaroundTime(aircraft.type);
+        const roundTripMinutes = blockTime * 2 + turnaround * 2;
+        const minAc = calculateMinAircraft(route.distance, aircraft.type, 1);
         rangeCheck.classList.remove('hidden');
         if (can) {
-            const turnaround = getTurnaroundTime(aircraft.type);
+            let msg = `Range OK (${acData.rangeKm}km \u2265 ${route.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            if (minAc > 1) {
+                msg += ` | Round trip: ${Math.floor(roundTripMinutes/60)}h${roundTripMinutes%60}m. This route requires at least ${minAc} aircraft for daily frequency. One aircraft takes ${Math.floor(roundTripMinutes/60)}h to complete the round trip.`;
+            }
             rangeCheck.className = 'range-check ok';
-            rangeCheck.textContent = `Range OK (${acData.rangeKm}km \u2265 ${route.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            rangeCheck.textContent = msg;
         } else {
             rangeCheck.className = 'range-check fail';
             rangeCheck.textContent = `Out of range! ${acData.rangeKm}km < ${route.distance}km`;
         }
 
         if (acWarning) {
+            const warnings = [];
             if (aircraft.status === 'in_flight') {
                 const nextFree = getAircraftNextFree(aircraft.id);
                 if (nextFree != null) {
                     const gt = getGameTime(nextFree);
-                    acWarning.classList.remove('hidden');
-                    acWarning.className = 'range-check fail';
-                    acWarning.textContent = `${aircraft.registration} is busy until Day ${(gt.week - 1) * 7 + gt.day} \u2014 ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}. Schedule will only activate when aircraft is free.`;
+                    warnings.push(`${aircraft.registration} is busy until Day ${(gt.week - 1) * 7 + gt.day} \u2014 ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}. Schedule will only activate when aircraft is free.`);
                 }
             } else if (aircraft.status === 'maintenance') {
+                warnings.push(`${aircraft.registration} is in maintenance. Schedule will activate when maintenance completes.`);
+            }
+
+            // Location warning
+            if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
+                warnings.push(`${aircraft.registration} is at ${aircraft.currentLocation} \u2014 cannot depart ${route.origin}. Aircraft must be at the departure airport.`);
+            }
+
+            if (warnings.length > 0) {
                 acWarning.classList.remove('hidden');
                 acWarning.className = 'range-check fail';
-                acWarning.textContent = `${aircraft.registration} is in maintenance. Schedule will activate when maintenance completes.`;
+                acWarning.textContent = warnings.join(' | ');
             } else {
                 acWarning.classList.add('hidden');
             }

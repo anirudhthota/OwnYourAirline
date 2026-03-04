@@ -1184,6 +1184,55 @@ html, body {
     margin-top: 8px;
 }
 
+.route-aircraft-list {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.route-aircraft-label {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.route-aircraft-tag {
+    background: rgba(0, 170, 255, 0.08);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+}
+
+.route-ac-loc {
+    color: var(--text-muted);
+    font-size: 10px;
+    margin-left: 4px;
+}
+
+.route-warning {
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 4px;
+    color: var(--accent-yellow);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.fleet-location {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 6px;
+}
+
 /* Route Creator */
 .route-creator {
     background: var(--bg-card);
