@@ -1177,6 +1177,27 @@ html, body {
     color: var(--accent-blue);
 }
 
+/* Schedule mode toggle */
+.sched-mode-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.sched-mode-btn {
+    font-size: 11px !important;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.sched-mode-btn.active {
+    background: var(--accent-blue) !important;
+    color: #000 !important;
+    border-color: var(--accent-blue) !important;
+}
+
+.status-maintenance { background: rgba(255, 68, 68, 0.1); color: var(--accent-red); }
+
 /* Schedule list */
 .sched-card {
     background: var(--bg-card);

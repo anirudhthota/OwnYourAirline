@@ -156,6 +156,13 @@ function generateRegistration(state) {
     return `${prefix}-${num}`;
 }
 
+export function getAircraftNextFree(aircraftId) {
+    const state = getState();
+    const flight = state.flights.active.find(f => f.aircraftId === aircraftId);
+    if (!flight) return null;
+    return flight.arrivalTime;
+}
+
 export function getFleetSummary() {
     const state = getState();
     const summary = {};

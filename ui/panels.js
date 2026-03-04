@@ -1,7 +1,8 @@
 import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
 import { AIRCRAFT_TYPES, getAircraftByType, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
 import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
-import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary } from '../engine/fleetManager.js';
+import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree } from '../engine/fleetManager.js';
+import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
 import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft } from '../engine/scheduler.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
@@ -155,7 +156,7 @@ function renderFleetList() {
                     <span class="fleet-reg" data-reg-display="${ac.id}">${ac.registration}</span>
                     <button class="fleet-rename-btn" data-rename="${ac.id}" title="Rename tail number">\u270E</button>
                     <span class="fleet-type">${ac.type}</span>
-                    <span class="fleet-status status-${ac.status}">${ac.status.replace('_', ' ')}</span>
+                    <span class="fleet-status status-${ac.status}">${ac.status === 'in_flight' ? 'BUSY' : ac.status.toUpperCase()}</span>
                 </div>
                 <div class="fleet-card-details">
                     <span>${acData ? acData.seats + ' seats' : ''}</span>
@@ -515,6 +516,10 @@ function renderSchedulePanel(container) {
                 <button class="btn-secondary" id="bank-create-btn">New Bank</button>
             </div>
         </div>
+        <div class="sched-mode-toggle">
+            <button class="btn-sm sched-mode-btn active" data-smode="simple">Simple</button>
+            <button class="btn-sm sched-mode-btn" data-smode="ops">Ops</button>
+        </div>
         <div id="sched-creator" class="sched-creator hidden"></div>
         <div id="bank-creator" class="bank-creator hidden"></div>
 
@@ -524,6 +529,13 @@ function renderSchedulePanel(container) {
         <h3 class="section-title">Schedules</h3>
         <div id="sched-list"></div>
     `;
+
+    container.querySelectorAll('.sched-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            container.querySelectorAll('.sched-mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
 
     renderBankList();
     renderScheduleList();
@@ -624,10 +636,24 @@ function renderScheduleCreator() {
                 <label>Aircraft</label>
                 <select id="sc-aircraft">
                     <option value="">Select aircraft...</option>
-                    ${state.fleet.map(ac => `<option value="${ac.id}">${ac.registration} — ${ac.type} (${ac.status})</option>`).join('')}
+                    ${state.fleet.map(ac => {
+                        const statusLabel = ac.status === 'available' ? '\u2705 Available'
+                            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
+                            : '\uD83D\uDFE1 Busy';
+                        let nextFreeLabel = '';
+                        if (ac.status === 'in_flight') {
+                            const nextFree = getAircraftNextFree(ac.id);
+                            if (nextFree != null) {
+                                const gt = getGameTime(nextFree);
+                                nextFreeLabel = ` \u2014 Free at D${((gt.week - 1) * 7 + gt.day)} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+                            }
+                        }
+                        return `<option value="${ac.id}">${ac.registration} \u2014 ${ac.type} [${statusLabel}${nextFreeLabel}]</option>`;
+                    }).join('')}
                 </select>
             </div>
             <div id="sc-range-check" class="range-check hidden"></div>
+            <div id="sc-aircraft-warning" class="range-check hidden"></div>
             <div class="form-row">
                 <label>Mode</label>
                 <select id="sc-mode">
@@ -668,7 +694,8 @@ function renderScheduleCreator() {
     function checkRange() {
         const routeId = parseInt(routeSelect.value);
         const acId = parseInt(aircraftSelect.value);
-        if (!routeId || !acId) { rangeCheck.classList.add('hidden'); return; }
+        const acWarning = document.getElementById('sc-aircraft-warning');
+        if (!routeId || !acId) { rangeCheck.classList.add('hidden'); if (acWarning) acWarning.classList.add('hidden'); return; }
         const route = getRouteById(routeId);
         const aircraft = state.fleet.find(f => f.id === acId);
         if (!route || !aircraft) return;
@@ -682,6 +709,24 @@ function renderScheduleCreator() {
         } else {
             rangeCheck.className = 'range-check fail';
             rangeCheck.textContent = `Out of range! ${acData.rangeKm}km < ${route.distance}km`;
+        }
+
+        if (acWarning) {
+            if (aircraft.status === 'in_flight') {
+                const nextFree = getAircraftNextFree(aircraft.id);
+                if (nextFree != null) {
+                    const gt = getGameTime(nextFree);
+                    acWarning.classList.remove('hidden');
+                    acWarning.className = 'range-check fail';
+                    acWarning.textContent = `${aircraft.registration} is busy until Day ${(gt.week - 1) * 7 + gt.day} \u2014 ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}. Schedule will only activate when aircraft is free.`;
+                }
+            } else if (aircraft.status === 'maintenance') {
+                acWarning.classList.remove('hidden');
+                acWarning.className = 'range-check fail';
+                acWarning.textContent = `${aircraft.registration} is in maintenance. Schedule will activate when maintenance completes.`;
+            } else {
+                acWarning.classList.add('hidden');
+            }
         }
     }
 
