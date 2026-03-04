@@ -48,9 +48,7 @@ function launchGame() {
         <div id="game-body" class="game-body">
             <nav id="side-nav" class="side-nav"></nav>
             <div id="main-area" class="main-area">
-                <div id="map-container" class="map-container">
-                    <canvas id="map-canvas"></canvas>
-                </div>
+                <div id="map-container" class="map-container"></div>
                 <div id="panel-content" class="panel-content"></div>
             </div>
         </div>
