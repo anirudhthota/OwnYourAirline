@@ -1,12 +1,13 @@
 import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
 import { AIRCRAFT_TYPES, getAircraftByType, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
-import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
+import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlLevel, SLOT_CONTROL_LEVELS, getSlotCost } from '../data/airports.js';
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
 import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft } from '../engine/scheduler.js';
 import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
+import { getSlotUsageForAirport } from '../engine/sim.js';
 import { updateHUD } from './hud.js';
 import { renderMap } from './map.js';
 import { showConfirm } from './modals.js';
@@ -327,9 +328,13 @@ function renderRoutesPanel(container) {
     container.innerHTML = `
         <div class="panel-header">
             <h2>Route Network</h2>
-            <button class="btn-accent" id="route-create-btn">Create Route</button>
+            <div>
+                <button class="btn-sm" id="route-airports-btn" style="margin-right:6px;">Airports</button>
+                <button class="btn-accent" id="route-create-btn">Create Route</button>
+            </div>
         </div>
         <div id="route-creator" class="route-creator hidden"></div>
+        <div id="route-airports-panel" class="hidden" style="margin-bottom:16px;"></div>
         <div id="route-list" class="route-list"></div>
     `;
 
@@ -340,6 +345,79 @@ function renderRoutesPanel(container) {
         creator.classList.toggle('hidden');
         if (!creator.classList.contains('hidden')) renderRouteCreator();
     });
+
+    document.getElementById('route-airports-btn').addEventListener('click', () => {
+        const panel = document.getElementById('route-airports-panel');
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) renderAirportsSubPanel();
+    });
+}
+
+function renderAirportsSubPanel() {
+    const state = getState();
+    const panel = document.getElementById('route-airports-panel');
+    if (!panel) return;
+
+    // Gather all airports the player operates at
+    const airportSet = new Set();
+    airportSet.add(state.config.hubAirport);
+    for (const route of state.routes) {
+        if (route.active) {
+            airportSet.add(route.origin);
+            airportSet.add(route.destination);
+        }
+    }
+
+    const airportData = [];
+    for (const iata of airportSet) {
+        const ap = getAirportByIata(iata);
+        if (!ap) continue;
+        const level = getSlotControlLevel(iata);
+        const levelInfo = SLOT_CONTROL_LEVELS[level];
+        const playerRoutes = state.routes.filter(r => r.active && (r.origin === iata || r.destination === iata));
+        const playerSchedules = state.schedules.filter(s => {
+            const route = getRouteById(s.routeId);
+            return route && route.active && (route.origin === iata || route.destination === iata);
+        });
+        const dailyDeps = playerSchedules.reduce((sum, s) => {
+            const route = getRouteById(s.routeId);
+            if (route && route.origin === iata) return sum + s.departureTimes.length;
+            return sum;
+        }, 0);
+        const dailyArrs = playerSchedules.reduce((sum, s) => {
+            const route = getRouteById(s.routeId);
+            if (route && route.destination === iata) return sum + s.departureTimes.length;
+            return sum;
+        }, 0);
+
+        const slotUsage = getSlotUsageForAirport(iata);
+        const isHub = iata === state.config.hubAirport;
+
+        airportData.push({ iata, ap, level, levelInfo, playerRoutes, dailyDeps, dailyArrs, slotUsage, isHub, slotsPerHour: ap.slotsPerHour });
+    }
+
+    airportData.sort((a, b) => b.level - a.level || b.playerRoutes.length - a.playerRoutes.length);
+
+    panel.innerHTML = `
+        <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:6px;padding:14px;">
+            <h3 class="section-title" style="margin-top:0;">Airports (${airportData.length})</h3>
+            ${airportData.map(d => {
+                const levelColor = d.level >= 4 ? 'var(--accent-red)' : d.level === 3 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+                const peakUsage = Object.values(d.slotUsage).length > 0 ? Math.max(...Object.values(d.slotUsage)) : 0;
+                const availPct = d.slotsPerHour > 0 ? Math.round((1 - peakUsage / d.slotsPerHour) * 100) : 100;
+                return `
+                    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-color);font-size:13px;">
+                        <span style="font-family:var(--font-mono);font-weight:700;color:var(--accent-blue);min-width:36px;">${d.iata}</span>
+                        <span style="color:${levelColor};font-family:var(--font-mono);font-size:11px;min-width:80px;">L${d.level} ${d.levelInfo.name}</span>
+                        <span style="color:var(--text-secondary);min-width:70px;">${d.dailyDeps} dep/${d.dailyArrs} arr</span>
+                        <span style="color:var(--text-muted);min-width:80px;">${d.slotsPerHour} slots/hr</span>
+                        ${d.level >= 4 ? `<span style="color:${availPct < 20 ? 'var(--accent-red)' : 'var(--accent-yellow)'};font-family:var(--font-mono);font-size:11px;">${availPct}% avail</span>` : ''}
+                        ${d.isHub ? '<span style="color:var(--accent-blue);font-family:var(--font-mono);font-size:10px;background:rgba(0,170,255,0.1);padding:1px 6px;border-radius:3px;">HUB</span>' : ''}
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
 }
 
 function renderRouteCreator() {
@@ -407,12 +485,27 @@ function updateRouteInfo() {
     const baseFare = calculateBaseFare(distance);
     const competitors = getAICompetitorsOnRoute(origin, dest);
 
+    const originLevel = getSlotControlLevel(origin);
+    const destLevel = getSlotControlLevel(dest);
+    const originSlotInfo = SLOT_CONTROL_LEVELS[originLevel];
+    const destSlotInfo = SLOT_CONTROL_LEVELS[destLevel];
+    const originSlotCost = getSlotCost(origin);
+    const returnCheckbox = document.getElementById('rc-return-route');
+    const wantsReturn = returnCheckbox ? returnCheckbox.checked : false;
+    const destSlotCost = wantsReturn ? getSlotCost(dest) : 0;
+    const totalSlotCost = originSlotCost + destSlotCost;
+
     infoDiv.classList.remove('hidden');
     infoDiv.innerHTML = `
         <div class="route-info-grid">
             <div><span>Distance:</span> ${Math.round(distance).toLocaleString()} km</div>
             <div><span>Base Fare:</span> $${baseFare.toFixed(0)}</div>
             <div><span>AI Competitors:</span> ${competitors.length}</div>
+        </div>
+        <div class="route-info-grid" style="margin-top:6px;">
+            <div><span>Origin slots:</span> L${originLevel} ${originSlotInfo.name}</div>
+            <div><span>Dest slots:</span> L${destLevel} ${destSlotInfo.name}</div>
+            ${totalSlotCost > 0 ? `<div><span>Slot fee:</span> $${formatMoney(totalSlotCost)} (one-time)</div>` : ''}
         </div>
     `;
 }

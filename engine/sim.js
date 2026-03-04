@@ -1,6 +1,6 @@
 import { getState, addLogEntry, addCash, deductCash, TICK_MINUTES, GAME_SPEEDS, formatMoney, MINUTES_PER_DAY, MINUTES_PER_HOUR, MINUTES_PER_MONTH, getGameTime } from './state.js';
 import { getAircraftByType } from '../data/aircraft.js';
-import { getAirportByIata } from '../data/airports.js';
+import { getAirportByIata, getSlotControlLevel } from '../data/airports.js';
 import { calculateLoadFactor, calculateFlightRevenue, calculateFlightCost, getRouteById, getTotalDailySeatsOnRoute } from './routeEngine.js';
 import { processMonthlyLeaseCosts } from './fleetManager.js';
 import { monthlyAIExpansion } from './aiEngine.js';
@@ -34,6 +34,7 @@ export function tick() {
     state.clock.totalMinutes += TICK_MINUTES;
     state.clock.totalTicks++;
 
+    processDelayedFlights();
     processFlightDepartures();
     processActiveFlights();
     processSlotUsage();
@@ -45,6 +46,44 @@ export function tick() {
     }
 
     if (tickCallback) tickCallback();
+}
+
+function processDelayedFlights() {
+    const state = getState();
+    if (!state.delayedFlights || state.delayedFlights.length === 0) return;
+
+    const minuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
+    const currentHour = Math.floor(minuteOfDay / MINUTES_PER_HOUR);
+
+    const stillDelayed = [];
+
+    for (const delayed of state.delayedFlights) {
+        const route = getRouteById(delayed.routeId);
+        const aircraft = state.fleet.find(f => f.id === delayed.aircraftId);
+        if (!route || !route.active || !aircraft) continue;
+        if (aircraft.status !== 'available') {
+            stillDelayed.push(delayed);
+            continue;
+        }
+
+        const schedule = state.schedules.find(s => s.id === delayed.scheduleId);
+        if (!schedule || !schedule.active) continue;
+
+        if (checkAndUseSlot(route.origin, currentHour)) {
+            delayed.delayMinutes += TICK_MINUTES;
+            addLogEntry(`Delayed flight ${route.origin}→${route.destination} now departing (${delayed.delayMinutes}min late)`, 'warning');
+            launchFlight(schedule, route, aircraft, delayed.depTime, delayed.delayMinutes);
+        } else {
+            delayed.delayMinutes += TICK_MINUTES;
+            if (delayed.delayMinutes >= 120) {
+                addLogEntry(`Flight ${route.origin}→${route.destination} cancelled after ${delayed.delayMinutes}min delay — no slot available`, 'error');
+            } else {
+                stillDelayed.push(delayed);
+            }
+        }
+    }
+
+    state.delayedFlights = stillDelayed;
 }
 
 function processFlightDepartures() {
@@ -69,25 +108,35 @@ function processFlightDepartures() {
             if (currentMinutes >= depMinutes && currentMinutes < depMinutes + TICK_MINUTES) {
                 if (aircraft.status !== 'available') continue;
 
-                if (!checkAndUseSlot(route.origin, currentHour)) {
-                    addLogEntry(`Slot unavailable at ${route.origin} for ${String(currentHour).padStart(2, '0')}:00 — flight skipped`, 'warning');
+                const isHub = route.origin === state.config.hubAirport;
+                const slotLevel = getSlotControlLevel(route.origin);
+                if (!isHub && slotLevel >= 3 && !checkAndUseSlot(route.origin, currentHour)) {
+                    addLogEntry(`Slot unavailable at ${route.origin} (Level ${slotLevel}) for ${String(currentHour).padStart(2, '0')}:00 — flight delayed`, 'warning');
+                    state.delayedFlights.push({
+                        scheduleId: schedule.id,
+                        routeId: route.id,
+                        aircraftId: aircraft.id,
+                        depTime,
+                        delayMinutes: 0,
+                        reason: `Slot unavailable at ${route.origin}`
+                    });
                     continue;
+                } else {
+                    checkAndUseSlot(route.origin, currentHour);
                 }
 
-                launchFlight(schedule, route, aircraft, depTime);
+                launchFlight(schedule, route, aircraft, depTime, 0);
             }
         }
     }
 }
 
-function launchFlight(schedule, route, aircraft, depTime) {
+function launchFlight(schedule, route, aircraft, depTime, delayMinutes) {
     const state = getState();
     const acData = getAircraftByType(aircraft.type);
     if (!acData) return;
 
-    const minuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
-    const currentDayStart = state.clock.totalMinutes - minuteOfDay;
-    const departureMinute = currentDayStart + depTime.hour * 60 + depTime.minute;
+    const departureMinute = state.clock.totalMinutes;
     const arrivalMinute = departureMinute + schedule.blockTimeMinutes;
 
     const totalSeats = getTotalDailySeatsOnRoute(route.id);
@@ -114,13 +163,15 @@ function launchFlight(schedule, route, aircraft, depTime) {
         cost,
         profit: revenue - cost,
         status: 'in_flight',
-        progress: 0
+        progress: 0,
+        delayMinutes: delayMinutes || 0
     };
 
     state.flights.active.push(flight);
     aircraft.status = 'in_flight';
 
-    deductCash(cost, `Flight ${route.origin}→${route.destination} (${aircraft.registration})`);
+    const delayNote = delayMinutes > 0 ? ` (delayed ${delayMinutes}min)` : '';
+    deductCash(cost, `Flight ${route.origin}→${route.destination} (${aircraft.registration})${delayNote}`);
 }
 
 function processActiveFlights() {
@@ -155,6 +206,14 @@ function processActiveFlights() {
             aircraft.status = 'available';
             const flightHours = (flight.arrivalTime - flight.departureTime) / 60;
             aircraft.totalFlightHours += flightHours;
+
+            // Delay cascade: if this flight was delayed, propagate delay to next rotation
+            if (flight.delayMinutes > 0) {
+                const nextDelayed = state.delayedFlights.find(d => d.aircraftId === aircraft.id);
+                if (nextDelayed) {
+                    nextDelayed.delayMinutes += flight.delayMinutes;
+                }
+            }
         }
 
         const idx = state.flights.active.indexOf(flight);
@@ -198,6 +257,19 @@ function checkAndUseSlot(airportIata, hour) {
 
     state.slots[key]++;
     return true;
+}
+
+export function getSlotUsageForAirport(airportIata) {
+    const state = getState();
+    if (!state) return {};
+    const usage = {};
+    for (const key in state.slots) {
+        if (key.startsWith(airportIata + '_')) {
+            const hour = parseInt(key.split('_')[1]);
+            usage[hour] = state.slots[key];
+        }
+    }
+    return usage;
 }
 
 function processMonthEnd() {

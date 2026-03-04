@@ -99,6 +99,7 @@ export function createInitialState(config) {
         },
 
         slots: {},
+        delayedFlights: [],
 
         banks: [],
         nextBankId: 1,

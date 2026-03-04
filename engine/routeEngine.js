@@ -1,5 +1,5 @@
 import { getState, addLogEntry, deductCash, addCash, formatMoney } from './state.js';
-import { getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
+import { getAirportByIata, getDistanceBetweenAirports, getSlotControlLevel, getSlotCost } from '../data/airports.js';
 import { getAircraftByType, FUEL_COST_PER_KG, CREW_COST_PER_FLIGHT_HOUR, AIRPORT_FEE_PER_DEPARTURE, AIRPORT_FEE_PER_ARRIVAL } from '../data/aircraft.js';
 
 export function createRoute(originIata, destinationIata) {
@@ -27,6 +27,15 @@ export function createRoute(originIata, destinationIata) {
 
     const distance = getDistanceBetweenAirports(originIata, destinationIata);
 
+    // Slot cost: one-time fee for Level 3+ airports (player auto-holds hub slots for free)
+    const isHub = originIata === state.config.hubAirport;
+    const originSlotCost = isHub ? 0 : getSlotCost(originIata);
+    if (originSlotCost > 0) {
+        if (!deductCash(originSlotCost, `Slot fee at ${originIata} (Level ${getSlotControlLevel(originIata)})`)) {
+            return null;
+        }
+    }
+
     const route = {
         id: state.nextRouteId++,
         origin: originIata,
@@ -37,7 +46,8 @@ export function createRoute(originIata, destinationIata) {
         schedules: [],
         demand: calculateRouteDemand(origin, dest, distance),
         baseFare: calculateBaseFare(distance),
-        createdDate: state.clock.totalMinutes
+        createdDate: state.clock.totalMinutes,
+        slotCostPaid: originSlotCost
     };
 
     state.routes.push(route);
