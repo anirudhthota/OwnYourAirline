@@ -50,69 +50,32 @@ export function deleteBank(bankId) {
 
 export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId) {
     const state = getState();
+
+    // Validate all params first — no state mutation until all checks pass
+    const errors = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId);
+    if (errors.length > 0) {
+        for (const err of errors) {
+            addLogEntry(err, 'error');
+        }
+        return { schedule: null, errors };
+    }
+
     const route = getRouteById(routeId);
-    if (!route) {
-        addLogEntry('Cannot create schedule: route not found', 'error');
-        return null;
-    }
-
     const aircraft = state.fleet.find(f => f.id === aircraftId);
-    if (!aircraft) {
-        addLogEntry('Cannot create schedule: aircraft not found', 'error');
-        return null;
-    }
-
     const acData = getAircraftByType(aircraft.type);
-    if (!canAircraftFlyRoute(aircraft.type, route.distance)) {
-        addLogEntry(`${acData.type} cannot fly ${route.origin}-${route.destination}: range ${acData.rangeKm}km < distance ${route.distance}km`, 'error');
-        return null;
-    }
 
     let times = [];
-
     if (mode === SCHEDULE_MODE.CUSTOM) {
-        if (!departureTimes || departureTimes.length === 0) {
-            addLogEntry('Custom schedule requires at least one departure time', 'error');
-            return null;
-        }
         times = departureTimes.map(t => ({
             hour: t.hour,
             minute: t.minute
         })).sort((a, b) => a.hour * 60 + a.minute - b.hour * 60 - b.minute);
     } else if (mode === SCHEDULE_MODE.BANKED) {
-        if (!bankId) {
-            addLogEntry('Banked schedule requires a connection bank', 'error');
-            return null;
-        }
         const bank = state.banks.find(b => b.id === bankId);
-        if (!bank) {
-            addLogEntry('Cannot create schedule: bank not found', 'error');
-            return null;
-        }
         times = generateBankedDepartures(bank, route, aircraft.type);
     }
 
     const blockTime = calculateBlockTime(route.distance, aircraft.type);
-    const turnaround = getTurnaroundTime(aircraft.type);
-
-    if (times.length > 1) {
-        const sortedMinutes = times.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
-        for (let i = 1; i < sortedMinutes.length; i++) {
-            const gap = sortedMinutes[i] - sortedMinutes[i - 1];
-            const needed = blockTime + turnaround;
-            if (gap < needed) {
-                const arrH = Math.floor((sortedMinutes[i - 1] + blockTime) / 60) % 24;
-                const arrM = (sortedMinutes[i - 1] + blockTime) % 60;
-                const earliestH = Math.floor((sortedMinutes[i - 1] + needed) / 60) % 24;
-                const earliestM = (sortedMinutes[i - 1] + needed) % 60;
-                addLogEntry(
-                    `Insufficient turnaround. ${aircraft.registration} arrives at ${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')} and needs ${turnaround} min ground time. Earliest next departure: ${String(earliestH).padStart(2, '0')}:${String(earliestM).padStart(2, '0')}.`,
-                    'error'
-                );
-                return null;
-            }
-        }
-    }
 
     const schedule = {
         id: state.nextScheduleId++,
@@ -130,7 +93,7 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
     route.schedules.push(schedule.id);
 
     addLogEntry(`Schedule created: ${route.origin}→${route.destination} with ${acData.type}, ${times.length} daily departure(s)`, 'schedule');
-    return schedule;
+    return { schedule, errors: [] };
 }
 
 export function deleteSchedule(scheduleId) {
@@ -230,9 +193,37 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
 
     // Min aircraft check
     if (acData && times.length > 0) {
+        const blockTime = calculateBlockTime(route.distance, aircraft.type);
+        const turnaround = getTurnaroundTime(aircraft.type);
+        const roundTrip = blockTime * 2 + turnaround * 2;
         const minAc = calculateMinAircraft(route.distance, aircraft.type, times.length);
         if (minAc > 1) {
-            errors.push(`This route requires at least ${minAc} aircraft for ${times.length} daily departure(s). One aircraft cannot complete the round trip in 24 hours.`);
+            errors.push(`This route requires at least ${minAc} aircraft for ${times.length} daily departure(s). Round trip: ${Math.floor(roundTrip / 60)}h${roundTrip % 60}m exceeds 24 hours for one aircraft.`);
+        }
+    }
+
+    // Scheduling conflict check — does this aircraft already have conflicting schedules?
+    if (aircraft && times.length > 0 && acData) {
+        const existingScheds = state.schedules.filter(s => s.aircraftId === aircraftId && s.active);
+        const blockTime = calculateBlockTime(route.distance, aircraft.type);
+
+        for (const existing of existingScheds) {
+            const existingRoute = getRouteById(existing.routeId);
+            if (!existingRoute) continue;
+            for (const newTime of times) {
+                const newDepMin = newTime.hour * 60 + newTime.minute;
+                const newReturnMin = newDepMin + blockTime;
+                for (const exTime of existing.departureTimes) {
+                    const exDepMin = exTime.hour * 60 + exTime.minute;
+                    const exReturnMin = exDepMin + existing.blockTimeMinutes;
+                    // Conflict if time windows overlap
+                    if (newDepMin < exReturnMin && exDepMin < newReturnMin) {
+                        errors.push(
+                            `Scheduling conflict: ${aircraft.registration} is already scheduled on ${existingRoute.origin}→${existingRoute.destination} departing ${String(exTime.hour).padStart(2, '0')}:${String(exTime.minute).padStart(2, '0')} (returns ~${String(Math.floor(exReturnMin / 60) % 24).padStart(2, '0')}:${String(exReturnMin % 60).padStart(2, '0')}). Conflicts with proposed departure at ${String(newTime.hour).padStart(2, '0')}:${String(newTime.minute).padStart(2, '0')}.`
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -247,17 +238,17 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
         return null;
     }
 
-    const route = getRouteById(routeId);
-    if (!route) {
-        addLogEntry('Route not found for schedule update', 'error');
+    // Validate all params before mutating state
+    const errors = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId);
+    if (errors.length > 0) {
+        for (const err of errors) {
+            addLogEntry(err, 'error');
+        }
         return null;
     }
 
+    const route = getRouteById(routeId);
     const aircraft = state.fleet.find(f => f.id === aircraftId);
-    if (!aircraft) {
-        addLogEntry('Aircraft not found for schedule update', 'error');
-        return null;
-    }
 
     let times = [];
     if (mode === SCHEDULE_MODE.CUSTOM) {
@@ -267,7 +258,6 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
         })).sort((a, b) => a.hour * 60 + a.minute - b.hour * 60 - b.minute);
     } else if (mode === SCHEDULE_MODE.BANKED) {
         const bank = state.banks.find(b => b.id === bankId);
-        if (!bank) return null;
         times = generateBankedDepartures(bank, route, aircraft.type);
     }
 

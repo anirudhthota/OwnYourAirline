@@ -1055,7 +1055,11 @@ function renderScheduleCreator() {
                     ${state.banks.map(b => `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2,'0')}:${String(b.startTime.minute).padStart(2,'0')}-${String(b.endTime.hour).padStart(2,'0')}:${String(b.endTime.minute).padStart(2,'0')})</option>`).join('')}
                 </select>
             </div>
-            <button class="btn-accent" id="sc-confirm">Create Schedule</button>
+            <div id="sc-validation-errors" class="validation-errors hidden"></div>
+            <div class="sched-editor-actions">
+                <button class="btn-accent" id="sc-confirm">Create Schedule</button>
+                <button class="btn-secondary" id="sc-validate">Validate</button>
+            </div>
         </div>
     `;
 
@@ -1135,16 +1139,56 @@ function renderScheduleCreator() {
         renderTimesList(customTimes);
     });
 
-    document.getElementById('sc-confirm').addEventListener('click', () => {
+    function getCreatorValues() {
         const routeId = parseInt(routeSelect.value);
         const acId = parseInt(aircraftSelect.value);
         const mode = document.getElementById('sc-mode').value;
         const bankId = mode === 'BANKED' ? parseInt(document.getElementById('sc-bank').value) : null;
+        const times = mode === 'CUSTOM' ? customTimes : [];
+        return { routeId, acId, mode, times, bankId };
+    }
 
-        if (!routeId || !acId) return;
+    function showCreatorErrors(errors) {
+        const errDiv = document.getElementById('sc-validation-errors');
+        if (errors.length === 0) {
+            errDiv.classList.add('hidden');
+            errDiv.innerHTML = '';
+            return false;
+        }
+        errDiv.classList.remove('hidden');
+        errDiv.innerHTML = errors.map(e => `<div class="validation-error-item">${e}</div>`).join('');
+        return true;
+    }
 
-        const schedule = createSchedule(routeId, acId, mode, mode === 'CUSTOM' ? customTimes : [], bankId);
-        if (schedule) {
+    document.getElementById('sc-validate').addEventListener('click', () => {
+        const { routeId, acId, mode, times, bankId } = getCreatorValues();
+        if (!routeId || !acId) {
+            showCreatorErrors(['Select both a route and an aircraft']);
+            return;
+        }
+        const errors = validateScheduleParams(routeId, acId, mode, times, bankId);
+        if (errors.length === 0) {
+            const errDiv = document.getElementById('sc-validation-errors');
+            errDiv.classList.remove('hidden');
+            errDiv.innerHTML = '<div class="validation-ok">All checks passed. Schedule is valid.</div>';
+        } else {
+            showCreatorErrors(errors);
+        }
+    });
+
+    document.getElementById('sc-confirm').addEventListener('click', () => {
+        const { routeId, acId, mode, times, bankId } = getCreatorValues();
+        if (!routeId || !acId) {
+            showCreatorErrors(['Select both a route and an aircraft']);
+            return;
+        }
+
+        const result = createSchedule(routeId, acId, mode, times, bankId);
+        if (result.errors && result.errors.length > 0) {
+            showCreatorErrors(result.errors);
+            return;
+        }
+        if (result.schedule) {
             renderScheduleList();
             creator.classList.add('hidden');
         }
