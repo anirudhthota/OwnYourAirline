@@ -127,7 +127,7 @@ export function updateScheduleDepartures(scheduleId, newTimes) {
     return true;
 }
 
-export function validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId) {
+export function validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, excludeScheduleId) {
     const state = getState();
     const errors = [];
 
@@ -204,7 +204,7 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
 
     // Scheduling conflict check — does this aircraft already have conflicting schedules?
     if (aircraft && times.length > 0 && acData) {
-        const existingScheds = state.schedules.filter(s => s.aircraftId === aircraftId && s.active);
+        const existingScheds = state.schedules.filter(s => s.aircraftId === aircraftId && s.active && s.id !== excludeScheduleId);
         const blockTime = calculateBlockTime(route.distance, aircraft.type);
 
         for (const existing of existingScheds) {
@@ -238,8 +238,8 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
         return null;
     }
 
-    // Validate all params before mutating state
-    const errors = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId);
+    // Validate all params before mutating state — exclude this schedule from conflict checks
+    const errors = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, scheduleId);
     if (errors.length > 0) {
         for (const err of errors) {
             addLogEntry(err, 'error');

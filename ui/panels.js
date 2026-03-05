@@ -1453,7 +1453,7 @@ function renderScheduleEditor(scheduleId) {
     // Validate button
     document.getElementById('se-validate').addEventListener('click', () => {
         const { routeId, acId, mode, times, bankId } = getEditorValues();
-        const errors = validateScheduleParams(routeId, acId, mode, times, bankId);
+        const errors = validateScheduleParams(routeId, acId, mode, times, bankId, scheduleId);
         if (errors.length === 0) {
             const errDiv = document.getElementById('se-validation-errors');
             errDiv.classList.remove('hidden');
@@ -1466,7 +1466,7 @@ function renderScheduleEditor(scheduleId) {
     // Save button
     document.getElementById('se-save').addEventListener('click', () => {
         const { routeId, acId, mode, times, bankId } = getEditorValues();
-        const errors = validateScheduleParams(routeId, acId, mode, times, bankId);
+        const errors = validateScheduleParams(routeId, acId, mode, times, bankId, scheduleId);
         if (showValidationErrors(errors)) return;
 
         const result = updateSchedule(scheduleId, routeId, acId, mode, times, bankId);
