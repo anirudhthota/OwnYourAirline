@@ -7,6 +7,46 @@ export const SCHEDULE_MODE = {
     BANKED: 'BANKED'
 };
 
+/**
+ * Returns all flight numbers currently in use across all schedules.
+ */
+export function getAllUsedFlightNumbers() {
+    const state = getState();
+    const used = new Set();
+    for (const sched of state.schedules) {
+        if (sched.flightNumbers) {
+            for (const fn of sched.flightNumbers) {
+                if (fn) used.add(fn);
+            }
+        }
+    }
+    return used;
+}
+
+/**
+ * Generates the next available flight number(s) for a schedule.
+ * Format: {IATA}{number} e.g., "6E101", "6E102"
+ * Numbers start at 101 and increment.
+ * @param {number} count - How many flight numbers to generate
+ * @returns {string[]} Array of flight number strings
+ */
+export function generateFlightNumbers(count) {
+    const state = getState();
+    const iata = state.config.iataCode;
+    const used = getAllUsedFlightNumbers();
+    const result = [];
+    let num = 101;
+    while (result.length < count) {
+        const fn = `${iata}${num}`;
+        if (!used.has(fn)) {
+            result.push(fn);
+            used.add(fn); // prevent duplicates within this batch
+        }
+        num++;
+    }
+    return result;
+}
+
 export function createBank(name, startHour, startMinute, endHour, endMinute) {
     const state = getState();
 
@@ -48,7 +88,7 @@ export function deleteBank(bankId) {
     return true;
 }
 
-export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId) {
+export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId, flightNumbers) {
     const state = getState();
 
     // Validate all params first — no state mutation until all checks pass
@@ -77,6 +117,11 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
 
     const blockTime = calculateBlockTime(route.distance, aircraft.type);
 
+    // Auto-generate flight numbers if not provided
+    const fnums = flightNumbers && flightNumbers.length === times.length
+        ? flightNumbers
+        : generateFlightNumbers(times.length);
+
     const schedule = {
         id: state.nextScheduleId++,
         routeId,
@@ -84,6 +129,7 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
         mode,
         bankId: bankId || null,
         departureTimes: times,
+        flightNumbers: fnums,
         blockTimeMinutes: blockTime,
         active: true,
         createdDate: state.clock.totalMinutes
@@ -244,7 +290,7 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
     return errors;
 }
 
-export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureTimes, bankId) {
+export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureTimes, bankId, flightNumbers) {
     const state = getState();
     const schedule = state.schedules.find(s => s.id === scheduleId);
     if (!schedule) {
@@ -290,6 +336,9 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
     schedule.mode = mode;
     schedule.bankId = bankId || null;
     schedule.departureTimes = times;
+    schedule.flightNumbers = flightNumbers && flightNumbers.length === times.length
+        ? flightNumbers
+        : generateFlightNumbers(times.length);
     schedule.blockTimeMinutes = blockTime;
 
     // Add to new route's schedule list

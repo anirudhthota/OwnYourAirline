@@ -4,7 +4,7 @@ import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlL
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
-import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule, swapAircraftOnRoute, getProjectedLocation } from '../engine/scheduler.js';
+import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule, swapAircraftOnRoute, getProjectedLocation, generateFlightNumbers, getAllUsedFlightNumbers } from '../engine/scheduler.js';
 import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
 import { getSlotUsageForAirport } from '../engine/sim.js';
@@ -546,44 +546,576 @@ function renderRouteCreator() {
     const state = getState();
     const creator = document.getElementById('route-creator');
 
+    const hasFleet = state.fleet.length > 0;
+    const aircraftOptions = state.fleet.map(ac => {
+        const statusLabel = ac.status === 'available' ? '\u2705 Available'
+            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
+            : '\uD83D\uDFE1 Busy';
+        let nextFreeLabel = '';
+        if (ac.status === 'in_flight') {
+            const nextFree = getAircraftNextFree(ac.id);
+            if (nextFree != null) {
+                const gt = getGameTime(nextFree);
+                nextFreeLabel = ` \u2014 Free at D${((gt.week - 1) * 7 + gt.day)} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+            }
+        }
+        return `<option value="${ac.id}">${ac.registration} \u2014 ${ac.type} [${statusLabel}${nextFreeLabel}]</option>`;
+    }).join('');
+
+    const bankOptions = state.banks.map(b =>
+        `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2,'0')}:${String(b.startTime.minute).padStart(2,'0')}-${String(b.endTime.hour).padStart(2,'0')}:${String(b.endTime.minute).padStart(2,'0')})</option>`
+    ).join('');
+
     creator.innerHTML = `
-        <div class="route-form">
-            <div class="form-row">
-                <label>Origin</label>
-                <input type="text" id="rc-origin" placeholder="Search airport..." autocomplete="off" />
-                <div id="rc-origin-results" class="hub-search-results"></div>
-                <input type="hidden" id="rc-origin-iata" />
+        <div class="unified-creator">
+            <!-- Section 1: Route Setup -->
+            <div class="uc-section">
+                <h3 class="uc-section-title">1. Route Setup</h3>
+                <div class="form-row">
+                    <label>Origin</label>
+                    <input type="text" id="rc-origin" placeholder="Search airport..." autocomplete="off" />
+                    <div id="rc-origin-results" class="hub-search-results"></div>
+                    <input type="hidden" id="rc-origin-iata" />
+                </div>
+                <div class="form-row">
+                    <label>Destination</label>
+                    <input type="text" id="rc-dest" placeholder="Search airport..." autocomplete="off" />
+                    <div id="rc-dest-results" class="hub-search-results"></div>
+                    <input type="hidden" id="rc-dest-iata" />
+                </div>
+                <div id="rc-info" class="route-info hidden"></div>
+                <label class="mc-option" style="margin:8px 0;">
+                    <input type="checkbox" id="rc-return-route" checked />
+                    <span>Also create return route</span>
+                </label>
             </div>
-            <div class="form-row">
-                <label>Destination</label>
-                <input type="text" id="rc-dest" placeholder="Search airport..." autocomplete="off" />
-                <div id="rc-dest-results" class="hub-search-results"></div>
-                <input type="hidden" id="rc-dest-iata" />
+
+            <!-- Section 2: Outbound Schedule -->
+            <div class="uc-section" id="uc-outbound-section">
+                <h3 class="uc-section-title">2. Outbound Schedule</h3>
+                ${!hasFleet ? '<div class="empty-state-sm">No aircraft in fleet. Add aircraft first, or skip scheduling.</div>' : `
+                <label class="mc-option" style="margin:0 0 8px;">
+                    <input type="checkbox" id="uc-outbound-enable" checked />
+                    <span>Create outbound schedule</span>
+                </label>
+                <div id="uc-outbound-fields">
+                    <div class="form-row">
+                        <label>Aircraft</label>
+                        <select id="uc-out-aircraft">
+                            <option value="">Select aircraft...</option>
+                            ${aircraftOptions}
+                        </select>
+                    </div>
+                    <div id="uc-out-range-check" class="range-check hidden"></div>
+                    <div id="uc-out-aircraft-warning" class="range-check hidden"></div>
+                    <div class="form-row">
+                        <label>Mode</label>
+                        <select id="uc-out-mode">
+                            <option value="CUSTOM">Custom (manual times)</option>
+                            <option value="BANKED">Banked (connection wave)</option>
+                        </select>
+                    </div>
+                    <div id="uc-out-custom-times" class="form-row">
+                        <label>Departure Times</label>
+                        <div id="uc-out-times-list" class="times-list"></div>
+                        <div class="form-row-inline">
+                            <input type="time" id="uc-out-new-time" value="08:00" />
+                            <button class="btn-sm btn-accent" id="uc-out-add-time">Add Time</button>
+                        </div>
+                    </div>
+                    <div id="uc-out-banked-opts" class="form-row hidden">
+                        <label>Connection Bank</label>
+                        <select id="uc-out-bank">
+                            <option value="">Select bank...</option>
+                            ${bankOptions}
+                        </select>
+                    </div>
+                </div>
+                `}
             </div>
-            <div id="rc-info" class="route-info hidden"></div>
-            <label class="mc-option" style="margin:8px 0;">
-                <input type="checkbox" id="rc-return-route" checked />
-                <span>Also create return route</span>
-            </label>
-            <button class="btn-accent" id="rc-confirm">Create Route</button>
+
+            <!-- Section 3: Return Schedule -->
+            <div class="uc-section" id="uc-return-section">
+                <h3 class="uc-section-title">3. Return Schedule</h3>
+                ${!hasFleet ? '<div class="empty-state-sm">No aircraft in fleet.</div>' : `
+                <label class="mc-option" style="margin:0 0 8px;">
+                    <input type="checkbox" id="uc-return-enable" checked />
+                    <span>Create return schedule</span>
+                </label>
+                <div id="uc-return-fields">
+                    <label class="mc-option" style="margin:0 0 8px;">
+                        <input type="checkbox" id="uc-return-same-ac" checked />
+                        <span>Same aircraft as outbound</span>
+                    </label>
+                    <div id="uc-ret-ac-row" class="form-row hidden">
+                        <label>Aircraft</label>
+                        <select id="uc-ret-aircraft">
+                            <option value="">Select aircraft...</option>
+                            ${aircraftOptions}
+                        </select>
+                    </div>
+                    <div id="uc-ret-range-check" class="range-check hidden"></div>
+                    <div id="uc-ret-aircraft-warning" class="range-check hidden"></div>
+                    <div class="form-row">
+                        <label>Mode</label>
+                        <select id="uc-ret-mode">
+                            <option value="CUSTOM">Custom (manual times)</option>
+                            <option value="BANKED">Banked (connection wave)</option>
+                        </select>
+                    </div>
+                    <div id="uc-ret-custom-times" class="form-row">
+                        <label>Departure Times</label>
+                        <div id="uc-ret-times-list" class="times-list"></div>
+                        <div class="form-row-inline">
+                            <input type="time" id="uc-ret-new-time" value="14:00" />
+                            <button class="btn-sm btn-accent" id="uc-ret-add-time">Add Time</button>
+                        </div>
+                    </div>
+                    <div id="uc-ret-banked-opts" class="form-row hidden">
+                        <label>Connection Bank</label>
+                        <select id="uc-ret-bank">
+                            <option value="">Select bank...</option>
+                            ${bankOptions}
+                        </select>
+                    </div>
+                </div>
+                `}
+            </div>
+
+            <!-- Section 4: Flight Numbers -->
+            <div class="uc-section" id="uc-flight-numbers-section">
+                <h3 class="uc-section-title">4. Flight Numbers</h3>
+                <div id="uc-fn-list" class="uc-fn-list">
+                    <div class="empty-state-sm">Add departure times above to generate flight numbers.</div>
+                </div>
+            </div>
+
+            <!-- Section 5: Validation Summary -->
+            <div class="uc-section" id="uc-validation-section">
+                <h3 class="uc-section-title">5. Validation Summary</h3>
+                <div id="uc-validation-errors" class="validation-errors hidden"></div>
+                <div id="uc-validation-ok" class="hidden"></div>
+            </div>
+
+            <div class="sched-editor-actions">
+                <button class="btn-accent" id="uc-confirm">Create Route & Schedule</button>
+                <button class="btn-secondary" id="uc-validate">Validate</button>
+                <button class="btn-secondary" id="uc-route-only">Route Only (No Schedule)</button>
+            </div>
         </div>
     `;
 
-    setupAirportSearch('rc-origin', 'rc-origin-results', 'rc-origin-iata', updateRouteInfo);
-    setupAirportSearch('rc-dest', 'rc-dest-results', 'rc-dest-iata', updateRouteInfo);
+    // State for departure times and flight numbers
+    const outboundTimes = [];
+    const returnTimes = [];
+    let outboundFlightNumbers = [];
+    let returnFlightNumbers = [];
 
-    document.getElementById('rc-confirm').addEventListener('click', () => {
+    setupAirportSearch('rc-origin', 'rc-origin-results', 'rc-origin-iata', onRouteInfoChange);
+    setupAirportSearch('rc-dest', 'rc-dest-results', 'rc-dest-iata', onRouteInfoChange);
+
+    // Return route checkbox toggles return section
+    const returnRouteCheckbox = document.getElementById('rc-return-route');
+    const returnSection = document.getElementById('uc-return-section');
+    if (returnRouteCheckbox) {
+        returnRouteCheckbox.addEventListener('change', () => {
+            returnSection.style.display = returnRouteCheckbox.checked ? '' : 'none';
+            onRouteInfoChange();
+            refreshFlightNumbers();
+        });
+    }
+
+    if (hasFleet) {
+        // Outbound: mode toggle
+        document.getElementById('uc-out-mode').addEventListener('change', (e) => {
+            document.getElementById('uc-out-custom-times').classList.toggle('hidden', e.target.value !== 'CUSTOM');
+            document.getElementById('uc-out-banked-opts').classList.toggle('hidden', e.target.value !== 'BANKED');
+        });
+
+        // Outbound: add time
+        document.getElementById('uc-out-add-time').addEventListener('click', () => {
+            const [h, m] = document.getElementById('uc-out-new-time').value.split(':').map(Number);
+            outboundTimes.push({ hour: h, minute: m });
+            outboundTimes.sort((a, b) => a.hour * 60 + a.minute - b.hour * 60 - b.minute);
+            renderTimesListUC(outboundTimes, 'uc-out-times-list', outboundTimes);
+            refreshFlightNumbers();
+        });
+
+        // Outbound: aircraft/route range check
+        const outAcSelect = document.getElementById('uc-out-aircraft');
+        outAcSelect.addEventListener('change', () => { checkRangeUC('out'); refreshFlightNumbers(); });
+
+        // Outbound: enable/disable
+        const outEnableCheckbox = document.getElementById('uc-outbound-enable');
+        if (outEnableCheckbox) {
+            outEnableCheckbox.addEventListener('change', () => {
+                document.getElementById('uc-outbound-fields').style.display = outEnableCheckbox.checked ? '' : 'none';
+                refreshFlightNumbers();
+            });
+        }
+
+        // Return: mode toggle
+        document.getElementById('uc-ret-mode').addEventListener('change', (e) => {
+            document.getElementById('uc-ret-custom-times').classList.toggle('hidden', e.target.value !== 'CUSTOM');
+            document.getElementById('uc-ret-banked-opts').classList.toggle('hidden', e.target.value !== 'BANKED');
+        });
+
+        // Return: add time
+        document.getElementById('uc-ret-add-time').addEventListener('click', () => {
+            const [h, m] = document.getElementById('uc-ret-new-time').value.split(':').map(Number);
+            returnTimes.push({ hour: h, minute: m });
+            returnTimes.sort((a, b) => a.hour * 60 + a.minute - b.hour * 60 - b.minute);
+            renderTimesListUC(returnTimes, 'uc-ret-times-list', returnTimes);
+            refreshFlightNumbers();
+        });
+
+        // Return: same aircraft toggle
+        const sameAcCheckbox = document.getElementById('uc-return-same-ac');
+        if (sameAcCheckbox) {
+            sameAcCheckbox.addEventListener('change', () => {
+                document.getElementById('uc-ret-ac-row').classList.toggle('hidden', sameAcCheckbox.checked);
+                checkRangeUC('ret');
+            });
+        }
+
+        // Return: aircraft change
+        const retAcSelect = document.getElementById('uc-ret-aircraft');
+        if (retAcSelect) {
+            retAcSelect.addEventListener('change', () => checkRangeUC('ret'));
+        }
+
+        // Return: enable/disable
+        const retEnableCheckbox = document.getElementById('uc-return-enable');
+        if (retEnableCheckbox) {
+            retEnableCheckbox.addEventListener('change', () => {
+                document.getElementById('uc-return-fields').style.display = retEnableCheckbox.checked ? '' : 'none';
+                refreshFlightNumbers();
+            });
+        }
+    }
+
+    function onRouteInfoChange() {
+        updateRouteInfo();
+        if (hasFleet) {
+            checkRangeUC('out');
+            checkRangeUC('ret');
+        }
+    }
+
+    function getRouteDistance() {
+        const origin = document.getElementById('rc-origin-iata').value;
+        const dest = document.getElementById('rc-dest-iata').value;
+        if (!origin || !dest) return null;
+        return getDistanceBetweenAirports(origin, dest);
+    }
+
+    function checkRangeUC(direction) {
+        const origin = document.getElementById('rc-origin-iata').value;
+        const dest = document.getElementById('rc-dest-iata').value;
+        const distance = getRouteDistance();
+        if (!distance) return;
+
+        const routeOrigin = direction === 'out' ? origin : dest;
+        const acSelect = direction === 'out'
+            ? document.getElementById('uc-out-aircraft')
+            : (document.getElementById('uc-return-same-ac').checked
+                ? document.getElementById('uc-out-aircraft')
+                : document.getElementById('uc-ret-aircraft'));
+
+        const acId = parseInt(acSelect.value);
+        const rangeDiv = document.getElementById(`uc-${direction}-range-check`);
+        const warnDiv = document.getElementById(`uc-${direction}-aircraft-warning`);
+
+        if (!acId) { rangeDiv.classList.add('hidden'); warnDiv.classList.add('hidden'); return; }
+
+        const aircraft = state.fleet.find(f => f.id === acId);
+        if (!aircraft) return;
+
+        const acData = getAircraftByType(aircraft.type);
+        const can = canAircraftFlyRoute(aircraft.type, distance);
+        const blockTime = calculateBlockTime(distance, aircraft.type);
+        const turnaround = getTurnaroundTime(aircraft.type);
+        const roundTrip = blockTime * 2 + turnaround * 2;
+
+        rangeDiv.classList.remove('hidden');
+        if (can) {
+            rangeDiv.className = 'range-check ok';
+            rangeDiv.textContent = `Range OK (${acData.rangeKm}km \u2265 ${Math.round(distance)}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+        } else {
+            rangeDiv.className = 'range-check fail';
+            rangeDiv.textContent = `Out of range! ${acData.rangeKm}km < ${Math.round(distance)}km`;
+        }
+
+        // Aircraft warnings
+        const warnings = [];
+        if (aircraft.status === 'in_flight') {
+            const nextFree = getAircraftNextFree(aircraft.id);
+            if (nextFree != null) {
+                const gt = getGameTime(nextFree);
+                warnings.push(`${aircraft.registration} is busy until Day ${(gt.week - 1) * 7 + gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}.`);
+            }
+        } else if (aircraft.status === 'maintenance') {
+            warnings.push(`${aircraft.registration} is in maintenance.`);
+        }
+        if (aircraft.currentLocation && aircraft.currentLocation !== routeOrigin && !aircraft.currentLocation.startsWith('airborne:')) {
+            warnings.push(`${aircraft.registration} is currently at ${aircraft.currentLocation}. A prior scheduled flight must deliver it to ${routeOrigin} before departure.`);
+        }
+
+        if (warnings.length > 0) {
+            warnDiv.classList.remove('hidden');
+            warnDiv.className = 'range-check fail';
+            warnDiv.textContent = warnings.join(' | ');
+        } else {
+            warnDiv.classList.add('hidden');
+        }
+    }
+
+    function renderTimesListUC(times, listId, timesArr) {
+        const list = document.getElementById(listId);
+        list.innerHTML = times.map((t, i) => `
+            <span class="time-tag">${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}
+                <button class="time-remove" data-idx="${i}">\u00d7</button>
+            </span>
+        `).join('');
+        list.querySelectorAll('.time-remove').forEach(btn => {
+            btn.addEventListener('click', () => {
+                timesArr.splice(parseInt(btn.dataset.idx), 1);
+                renderTimesListUC(timesArr, listId, timesArr);
+                refreshFlightNumbers();
+            });
+        });
+    }
+
+    function refreshFlightNumbers() {
+        const fnDiv = document.getElementById('uc-fn-list');
+        const origin = document.getElementById('rc-origin-iata').value;
+        const dest = document.getElementById('rc-dest-iata').value;
+        const iata = state.config.iataCode;
+
+        const outEnabled = hasFleet && document.getElementById('uc-outbound-enable') && document.getElementById('uc-outbound-enable').checked;
+        const retEnabled = hasFleet && returnRouteCheckbox.checked && document.getElementById('uc-return-enable') && document.getElementById('uc-return-enable').checked;
+
+        const totalNeeded = (outEnabled ? outboundTimes.length : 0) + (retEnabled ? returnTimes.length : 0);
+        if (totalNeeded === 0) {
+            fnDiv.innerHTML = '<div class="empty-state-sm">Add departure times above to generate flight numbers.</div>';
+            outboundFlightNumbers = [];
+            returnFlightNumbers = [];
+            return;
+        }
+
+        const allNumbers = generateFlightNumbers(totalNeeded);
+        outboundFlightNumbers = outEnabled ? allNumbers.slice(0, outboundTimes.length) : [];
+        returnFlightNumbers = retEnabled ? allNumbers.slice(outboundTimes.length) : [];
+
+        let html = '';
+        if (outEnabled && outboundTimes.length > 0) {
+            html += `<div class="uc-fn-group"><div class="uc-fn-label">${origin || '???'} \u2192 ${dest || '???'} (Outbound)</div>`;
+            outboundTimes.forEach((t, i) => {
+                html += `<div class="uc-fn-row">
+                    <span class="uc-fn-time">${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}</span>
+                    <input type="text" class="uc-fn-input" data-dir="out" data-idx="${i}" value="${outboundFlightNumbers[i] || ''}" maxlength="8" />
+                </div>`;
+            });
+            html += '</div>';
+        }
+        if (retEnabled && returnTimes.length > 0) {
+            html += `<div class="uc-fn-group"><div class="uc-fn-label">${dest || '???'} \u2192 ${origin || '???'} (Return)</div>`;
+            returnTimes.forEach((t, i) => {
+                html += `<div class="uc-fn-row">
+                    <span class="uc-fn-time">${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}</span>
+                    <input type="text" class="uc-fn-input" data-dir="ret" data-idx="${i}" value="${returnFlightNumbers[i] || ''}" maxlength="8" />
+                </div>`;
+            });
+            html += '</div>';
+        }
+        fnDiv.innerHTML = html;
+
+        // Listen for manual edits
+        fnDiv.querySelectorAll('.uc-fn-input').forEach(inp => {
+            inp.addEventListener('change', () => {
+                const dir = inp.dataset.dir;
+                const idx = parseInt(inp.dataset.idx);
+                if (dir === 'out') outboundFlightNumbers[idx] = inp.value.trim();
+                else returnFlightNumbers[idx] = inp.value.trim();
+            });
+        });
+    }
+
+    function gatherAllValues() {
+        const origin = document.getElementById('rc-origin-iata').value;
+        const dest = document.getElementById('rc-dest-iata').value;
+        const wantsReturn = returnRouteCheckbox.checked;
+
+        const outEnabled = hasFleet && document.getElementById('uc-outbound-enable') && document.getElementById('uc-outbound-enable').checked;
+        const retEnabled = hasFleet && wantsReturn && document.getElementById('uc-return-enable') && document.getElementById('uc-return-enable').checked;
+
+        const outAcId = outEnabled ? parseInt(document.getElementById('uc-out-aircraft').value) : null;
+        const outMode = outEnabled ? document.getElementById('uc-out-mode').value : null;
+        const outBankId = outEnabled && outMode === 'BANKED' ? parseInt(document.getElementById('uc-out-bank').value) : null;
+
+        const sameAc = document.getElementById('uc-return-same-ac') && document.getElementById('uc-return-same-ac').checked;
+        const retAcId = retEnabled ? (sameAc ? outAcId : parseInt(document.getElementById('uc-ret-aircraft').value)) : null;
+        const retMode = retEnabled ? document.getElementById('uc-ret-mode').value : null;
+        const retBankId = retEnabled && retMode === 'BANKED' ? parseInt(document.getElementById('uc-ret-bank').value) : null;
+
+        return { origin, dest, wantsReturn, outEnabled, retEnabled, outAcId, outMode, outBankId, retAcId, retMode, retBankId, sameAc };
+    }
+
+    function runValidation() {
+        const vals = gatherAllValues();
+        const errors = [];
+
+        if (!vals.origin || !vals.dest) {
+            errors.push('Select both origin and destination airports.');
+            return errors;
+        }
+        if (vals.origin === vals.dest) {
+            errors.push('Origin and destination cannot be the same.');
+            return errors;
+        }
+
+        // Check if route already exists
+        const existing = state.routes.find(r => r.origin === vals.origin && r.destination === vals.dest);
+        if (existing) errors.push(`Route ${vals.origin} \u2192 ${vals.dest} already exists.`);
+        if (vals.wantsReturn) {
+            const existingRet = state.routes.find(r => r.origin === vals.dest && r.destination === vals.origin);
+            if (existingRet) errors.push(`Return route ${vals.dest} \u2192 ${vals.origin} already exists.`);
+        }
+
+        // Validate outbound schedule
+        if (vals.outEnabled) {
+            if (!vals.outAcId) errors.push('Outbound: Select an aircraft.');
+            else if (outboundTimes.length === 0) errors.push('Outbound: Add at least one departure time.');
+            else {
+                // Create a temporary "virtual route" for validation
+                const distance = getRouteDistance();
+                if (distance) {
+                    // We can't use validateScheduleParams since route doesn't exist yet
+                    // Do manual checks
+                    const aircraft = state.fleet.find(f => f.id === vals.outAcId);
+                    if (aircraft) {
+                        const acData = getAircraftByType(aircraft.type);
+                        if (!canAircraftFlyRoute(aircraft.type, distance)) {
+                            errors.push(`Outbound: ${acData.type} cannot fly this route (range ${acData.rangeKm}km < ${Math.round(distance)}km).`);
+                        }
+                        // Turnaround check
+                        if (outboundTimes.length > 1) {
+                            const blockTime = calculateBlockTime(distance, aircraft.type);
+                            const turnaround = getTurnaroundTime(aircraft.type);
+                            const sorted = outboundTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
+                            for (let i = 1; i < sorted.length; i++) {
+                                const gap = sorted[i] - sorted[i - 1];
+                                const needed = blockTime + turnaround;
+                                if (gap < needed) {
+                                    errors.push(`Outbound: Insufficient turnaround between departures at ${String(Math.floor(sorted[i-1]/60)).padStart(2,'0')}:${String(sorted[i-1]%60).padStart(2,'0')} and ${String(Math.floor(sorted[i]/60)).padStart(2,'0')}:${String(sorted[i]%60).padStart(2,'0')}.`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate return schedule
+        if (vals.retEnabled) {
+            if (!vals.retAcId) errors.push('Return: Select an aircraft.');
+            else if (returnTimes.length === 0) errors.push('Return: Add at least one departure time.');
+            else {
+                const distance = getRouteDistance();
+                if (distance) {
+                    const aircraft = state.fleet.find(f => f.id === vals.retAcId);
+                    if (aircraft) {
+                        const acData = getAircraftByType(aircraft.type);
+                        if (!canAircraftFlyRoute(aircraft.type, distance)) {
+                            errors.push(`Return: ${acData.type} cannot fly this route (range ${acData.rangeKm}km < ${Math.round(distance)}km).`);
+                        }
+                        if (returnTimes.length > 1) {
+                            const blockTime = calculateBlockTime(distance, aircraft.type);
+                            const turnaround = getTurnaroundTime(aircraft.type);
+                            const sorted = returnTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
+                            for (let i = 1; i < sorted.length; i++) {
+                                const gap = sorted[i] - sorted[i - 1];
+                                const needed = blockTime + turnaround;
+                                if (gap < needed) {
+                                    errors.push(`Return: Insufficient turnaround between departures at ${String(Math.floor(sorted[i-1]/60)).padStart(2,'0')}:${String(sorted[i-1]%60).padStart(2,'0')} and ${String(Math.floor(sorted[i]/60)).padStart(2,'0')}:${String(sorted[i]%60).padStart(2,'0')}.`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate rotation feasibility (same aircraft doing both directions)
+        if (vals.outEnabled && vals.retEnabled && vals.outAcId === vals.retAcId && outboundTimes.length > 0 && returnTimes.length > 0) {
+            const distance = getRouteDistance();
+            if (distance) {
+                const aircraft = state.fleet.find(f => f.id === vals.outAcId);
+                if (aircraft) {
+                    const blockTime = calculateBlockTime(distance, aircraft.type);
+                    const turnaround = getTurnaroundTime(aircraft.type);
+                    // Check that return departs after outbound arrives + turnaround
+                    const outSorted = outboundTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
+                    const retSorted = returnTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
+                    // For rotation: each outbound arrival + turnaround should have a return departure after it
+                    for (const outDep of outSorted) {
+                        const outArr = outDep + blockTime;
+                        const earliestRetDep = outArr + turnaround;
+                        // Find the first return departure that's after this outbound arrival
+                        const matchingRet = retSorted.find(r => r >= earliestRetDep);
+                        if (!matchingRet && earliestRetDep < 1440) {
+                            errors.push(`Rotation: Outbound dep ${String(Math.floor(outDep/60)).padStart(2,'0')}:${String(outDep%60).padStart(2,'0')} arrives ~${String(Math.floor(outArr/60)%24).padStart(2,'0')}:${String(outArr%60).padStart(2,'0')}, needs ${turnaround}min turnaround. No matching return departure found.`);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate flight number uniqueness
+        const allFn = [...outboundFlightNumbers, ...returnFlightNumbers].filter(Boolean);
+        const usedFn = getAllUsedFlightNumbers();
+        const seenFn = new Set();
+        for (const fn of allFn) {
+            if (usedFn.has(fn)) errors.push(`Flight number ${fn} is already in use.`);
+            if (seenFn.has(fn)) errors.push(`Flight number ${fn} is duplicated.`);
+            seenFn.add(fn);
+        }
+
+        return errors;
+    }
+
+    function showValidationResult(errors) {
+        const errDiv = document.getElementById('uc-validation-errors');
+        const okDiv = document.getElementById('uc-validation-ok');
+        if (errors.length === 0) {
+            errDiv.classList.add('hidden');
+            okDiv.classList.remove('hidden');
+            okDiv.innerHTML = '<div class="validation-ok">All checks passed. Ready to create.</div>';
+        } else {
+            okDiv.classList.add('hidden');
+            errDiv.classList.remove('hidden');
+            errDiv.innerHTML = errors.map(e => `<div class="validation-error-item">${e}</div>`).join('');
+        }
+    }
+
+    // Validate button
+    document.getElementById('uc-validate').addEventListener('click', () => {
+        showValidationResult(runValidation());
+    });
+
+    // Route Only button
+    document.getElementById('uc-route-only').addEventListener('click', () => {
         const origin = document.getElementById('rc-origin-iata').value;
         const dest = document.getElementById('rc-dest-iata').value;
         if (!origin || !dest) return;
 
         const route = createRoute(origin, dest);
         if (route) {
-            const createReturn = document.getElementById('rc-return-route').checked;
-            if (createReturn) {
+            const wantsReturn = returnRouteCheckbox.checked;
+            if (wantsReturn) {
                 const returnRoute = createRoute(dest, origin);
                 if (returnRoute) {
-                    // Link the paired routes
                     route.pairedRouteId = returnRoute.id;
                     returnRoute.pairedRouteId = route.id;
                 }
@@ -593,6 +1125,53 @@ function renderRouteCreator() {
             updateHUD();
             creator.classList.add('hidden');
         }
+    });
+
+    // Create Route & Schedule button
+    document.getElementById('uc-confirm').addEventListener('click', () => {
+        const errors = runValidation();
+        if (errors.length > 0) {
+            showValidationResult(errors);
+            return;
+        }
+
+        const vals = gatherAllValues();
+
+        // Step 1: Create routes
+        const route = createRoute(vals.origin, vals.dest);
+        if (!route) return;
+
+        let returnRoute = null;
+        if (vals.wantsReturn) {
+            returnRoute = createRoute(vals.dest, vals.origin);
+            if (returnRoute) {
+                route.pairedRouteId = returnRoute.id;
+                returnRoute.pairedRouteId = route.id;
+            }
+        }
+
+        // Step 2: Create outbound schedule
+        if (vals.outEnabled && outboundTimes.length > 0) {
+            const result = createSchedule(route.id, vals.outAcId, vals.outMode, outboundTimes, vals.outBankId, outboundFlightNumbers);
+            if (result.errors && result.errors.length > 0) {
+                showValidationResult(result.errors.map(e => `Outbound schedule: ${e}`));
+                return;
+            }
+        }
+
+        // Step 3: Create return schedule
+        if (vals.retEnabled && returnRoute && returnTimes.length > 0) {
+            const result = createSchedule(returnRoute.id, vals.retAcId, vals.retMode, returnTimes, vals.retBankId, returnFlightNumbers);
+            if (result.errors && result.errors.length > 0) {
+                showValidationResult(result.errors.map(e => `Return schedule: ${e}`));
+                return;
+            }
+        }
+
+        renderRouteList();
+        renderMap();
+        updateHUD();
+        creator.classList.add('hidden');
     });
 }
 
@@ -1310,7 +1889,11 @@ function renderScheduleList() {
     function renderSchedCard(sched, state) {
         const route = getRouteById(sched.routeId);
         const aircraft = state.fleet.find(f => f.id === sched.aircraftId);
-        const times = sched.departureTimes.map(t => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`).join(', ');
+        const times = sched.departureTimes.map((t, i) => {
+            const timeStr = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+            const fn = sched.flightNumbers && sched.flightNumbers[i] ? sched.flightNumbers[i] : '';
+            return fn ? `${fn} ${timeStr}` : timeStr;
+        }).join(', ');
         return `
             <div class="sched-card">
                 <div class="sched-card-header">
