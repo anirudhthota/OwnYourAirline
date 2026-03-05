@@ -4,7 +4,7 @@ import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlL
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
-import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft } from '../engine/scheduler.js';
+import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule } from '../engine/scheduler.js';
 import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
 import { getSlotUsageForAirport } from '../engine/sim.js';
@@ -1079,17 +1079,247 @@ function renderScheduleList() {
                     <span>Departures: ${times || 'None'}</span>
                 </div>
                 <div class="sched-card-actions">
+                    <button class="btn-sm btn-accent" data-edit-sched="${sched.id}">Edit</button>
                     <button class="btn-sm btn-danger" data-delete-sched="${sched.id}">Delete</button>
                 </div>
             </div>
         `;
     }).join('');
 
+    listDiv.querySelectorAll('[data-edit-sched]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const schedId = parseInt(btn.dataset.editSched);
+            renderScheduleEditor(schedId);
+        });
+    });
+
     listDiv.querySelectorAll('[data-delete-sched]').forEach(btn => {
         btn.addEventListener('click', () => {
             deleteSchedule(parseInt(btn.dataset.deleteSched));
             renderScheduleList();
         });
+    });
+}
+
+function renderScheduleEditor(scheduleId) {
+    const state = getState();
+    const schedule = state.schedules.find(s => s.id === scheduleId);
+    if (!schedule) return;
+
+    const route = getRouteById(schedule.routeId);
+    const aircraft = state.fleet.find(f => f.id === schedule.aircraftId);
+
+    // Show the creator area and populate it as an editor
+    const creator = document.getElementById('sched-creator');
+    creator.classList.remove('hidden');
+
+    const editTimes = schedule.departureTimes.map(t => ({ hour: t.hour, minute: t.minute }));
+
+    creator.innerHTML = `
+        <div class="sched-form">
+            <div class="sched-editor-title">Editing Schedule #${scheduleId}</div>
+            <div class="form-row">
+                <label>Route</label>
+                <select id="se-route">
+                    ${state.routes.filter(r => r.active).map(r => `<option value="${r.id}" ${r.id === schedule.routeId ? 'selected' : ''}>${r.origin} \u2192 ${r.destination} (${r.distance}km)</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Aircraft</label>
+                <select id="se-aircraft">
+                    ${state.fleet.map(ac => {
+                        const statusLabel = ac.status === 'available' ? '\u2705 Available'
+                            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
+                            : '\uD83D\uDFE1 Busy';
+                        let nextFreeLabel = '';
+                        if (ac.status === 'in_flight') {
+                            const nextFree = getAircraftNextFree(ac.id);
+                            if (nextFree != null) {
+                                const gt = getGameTime(nextFree);
+                                nextFreeLabel = ' \u2014 Free at D' + ((gt.week - 1) * 7 + gt.day) + ' ' + String(gt.hour).padStart(2, '0') + ':' + String(gt.minute).padStart(2, '0');
+                            }
+                        }
+                        return '<option value="' + ac.id + '"' + (ac.id === schedule.aircraftId ? ' selected' : '') + '>' + ac.registration + ' \u2014 ' + ac.type + ' [' + statusLabel + nextFreeLabel + ']</option>';
+                    }).join('')}
+                </select>
+            </div>
+            <div id="se-range-check" class="range-check hidden"></div>
+            <div id="se-aircraft-warning" class="range-check hidden"></div>
+            <div class="form-row">
+                <label>Mode</label>
+                <select id="se-mode">
+                    <option value="CUSTOM" ${schedule.mode === 'CUSTOM' ? 'selected' : ''}>Custom (manual times)</option>
+                    <option value="BANKED" ${schedule.mode === 'BANKED' ? 'selected' : ''}>Banked (connection wave)</option>
+                </select>
+            </div>
+            <div id="se-custom-times" class="form-row ${schedule.mode !== 'CUSTOM' ? 'hidden' : ''}">
+                <label>Departure Times</label>
+                <div id="se-times-list" class="times-list"></div>
+                <div class="form-row-inline">
+                    <input type="time" id="se-new-time" value="08:00" />
+                    <button class="btn-sm btn-accent" id="se-add-time">Add Time</button>
+                </div>
+            </div>
+            <div id="se-banked-opts" class="form-row ${schedule.mode !== 'BANKED' ? 'hidden' : ''}">
+                <label>Connection Bank</label>
+                <select id="se-bank">
+                    <option value="">Select bank...</option>
+                    ${state.banks.map(b => '<option value="' + b.id + '"' + (b.id === schedule.bankId ? ' selected' : '') + '>' + b.name + ' (' + String(b.startTime.hour).padStart(2,'0') + ':' + String(b.startTime.minute).padStart(2,'0') + '-' + String(b.endTime.hour).padStart(2,'0') + ':' + String(b.endTime.minute).padStart(2,'0') + ')</option>').join('')}
+                </select>
+            </div>
+            <div id="se-validation-errors" class="validation-errors hidden"></div>
+            <div class="sched-editor-actions">
+                <button class="btn-accent" id="se-save">Save Changes</button>
+                <button class="btn-secondary" id="se-validate">Validate</button>
+                <button class="btn-secondary" id="se-cancel">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    // Render existing departure times
+    function renderEditorTimesList() {
+        const list = document.getElementById('se-times-list');
+        list.innerHTML = editTimes.map((t, i) => `
+            <span class="time-tag">${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}
+                <button class="time-remove" data-idx="${i}">\u00d7</button>
+            </span>
+        `).join('');
+        list.querySelectorAll('.time-remove').forEach(btn => {
+            btn.addEventListener('click', () => {
+                editTimes.splice(parseInt(btn.dataset.idx), 1);
+                renderEditorTimesList();
+            });
+        });
+    }
+    renderEditorTimesList();
+
+    // Mode toggle
+    document.getElementById('se-mode').addEventListener('change', (e) => {
+        document.getElementById('se-custom-times').classList.toggle('hidden', e.target.value !== 'CUSTOM');
+        document.getElementById('se-banked-opts').classList.toggle('hidden', e.target.value !== 'BANKED');
+    });
+
+    // Range check on route/aircraft change
+    const routeSelect = document.getElementById('se-route');
+    const aircraftSelect = document.getElementById('se-aircraft');
+    const rangeCheck = document.getElementById('se-range-check');
+
+    function checkEditorRange() {
+        const routeId = parseInt(routeSelect.value);
+        const acId = parseInt(aircraftSelect.value);
+        const acWarning = document.getElementById('se-aircraft-warning');
+        if (!routeId || !acId) { rangeCheck.classList.add('hidden'); if (acWarning) acWarning.classList.add('hidden'); return; }
+        const r = getRouteById(routeId);
+        const ac = state.fleet.find(f => f.id === acId);
+        if (!r || !ac) return;
+        const can = canAircraftFlyRoute(ac.type, r.distance);
+        const acData = getAircraftByType(ac.type);
+        const blockTime = calculateBlockTime(r.distance, ac.type);
+        const turnaround = getTurnaroundTime(ac.type);
+        const roundTripMinutes = blockTime * 2 + turnaround * 2;
+        const minAc = calculateMinAircraft(r.distance, ac.type, 1);
+        rangeCheck.classList.remove('hidden');
+        if (can) {
+            let msg = `Range OK (${acData.rangeKm}km \u2265 ${r.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            if (minAc > 1) {
+                msg += ` | Round trip: ${Math.floor(roundTripMinutes/60)}h${roundTripMinutes%60}m. Requires at least ${minAc} aircraft.`;
+            }
+            rangeCheck.className = 'range-check ok';
+            rangeCheck.textContent = msg;
+        } else {
+            rangeCheck.className = 'range-check fail';
+            rangeCheck.textContent = `Out of range! ${acData.rangeKm}km < ${r.distance}km`;
+        }
+
+        if (acWarning) {
+            const warnings = [];
+            if (ac.status === 'in_flight') {
+                const nextFree = getAircraftNextFree(ac.id);
+                if (nextFree != null) {
+                    const gt = getGameTime(nextFree);
+                    warnings.push(`${ac.registration} is busy until Day ${(gt.week - 1) * 7 + gt.day} \u2014 ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}.`);
+                }
+            } else if (ac.status === 'maintenance') {
+                warnings.push(`${ac.registration} is in maintenance.`);
+            }
+            if (ac.currentLocation && ac.currentLocation !== r.origin && !ac.currentLocation.startsWith('airborne:')) {
+                warnings.push(`${ac.registration} is at ${ac.currentLocation} \u2014 cannot depart ${r.origin}.`);
+            }
+            if (warnings.length > 0) {
+                acWarning.classList.remove('hidden');
+                acWarning.className = 'range-check fail';
+                acWarning.textContent = warnings.join(' | ');
+            } else {
+                acWarning.classList.add('hidden');
+            }
+        }
+    }
+
+    routeSelect.addEventListener('change', checkEditorRange);
+    aircraftSelect.addEventListener('change', checkEditorRange);
+    checkEditorRange(); // run immediately
+
+    // Add time button
+    document.getElementById('se-add-time').addEventListener('click', () => {
+        const timeInput = document.getElementById('se-new-time');
+        const [h, m] = timeInput.value.split(':').map(Number);
+        editTimes.push({ hour: h, minute: m });
+        editTimes.sort((a, b) => a.hour * 60 + a.minute - b.hour * 60 - b.minute);
+        renderEditorTimesList();
+    });
+
+    // Collect form values helper
+    function getEditorValues() {
+        const routeId = parseInt(routeSelect.value);
+        const acId = parseInt(aircraftSelect.value);
+        const mode = document.getElementById('se-mode').value;
+        const bankId = mode === 'BANKED' ? parseInt(document.getElementById('se-bank').value) : null;
+        const times = mode === 'CUSTOM' ? editTimes : [];
+        return { routeId, acId, mode, times, bankId };
+    }
+
+    // Show validation errors
+    function showValidationErrors(errors) {
+        const errDiv = document.getElementById('se-validation-errors');
+        if (errors.length === 0) {
+            errDiv.classList.add('hidden');
+            errDiv.innerHTML = '';
+            return false;
+        }
+        errDiv.classList.remove('hidden');
+        errDiv.innerHTML = errors.map(e => `<div class="validation-error-item">${e}</div>`).join('');
+        return true;
+    }
+
+    // Validate button
+    document.getElementById('se-validate').addEventListener('click', () => {
+        const { routeId, acId, mode, times, bankId } = getEditorValues();
+        const errors = validateScheduleParams(routeId, acId, mode, times, bankId);
+        if (errors.length === 0) {
+            const errDiv = document.getElementById('se-validation-errors');
+            errDiv.classList.remove('hidden');
+            errDiv.innerHTML = '<div class="validation-ok">All checks passed. Schedule is valid.</div>';
+        } else {
+            showValidationErrors(errors);
+        }
+    });
+
+    // Save button
+    document.getElementById('se-save').addEventListener('click', () => {
+        const { routeId, acId, mode, times, bankId } = getEditorValues();
+        const errors = validateScheduleParams(routeId, acId, mode, times, bankId);
+        if (showValidationErrors(errors)) return;
+
+        const result = updateSchedule(scheduleId, routeId, acId, mode, times, bankId);
+        if (result) {
+            creator.classList.add('hidden');
+            renderScheduleList();
+        }
+    });
+
+    // Cancel button
+    document.getElementById('se-cancel').addEventListener('click', () => {
+        creator.classList.add('hidden');
     });
 }
 
