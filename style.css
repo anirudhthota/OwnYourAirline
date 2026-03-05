@@ -1154,6 +1154,17 @@ html, body {
     color: var(--accent-blue);
 }
 
+.route-paired-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(0, 170, 255, 0.1);
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
 .route-dist {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -1388,6 +1399,23 @@ html, body {
 .status-maintenance { background: rgba(255, 68, 68, 0.1); color: var(--accent-red); }
 
 /* Schedule list */
+.sched-group-paired {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-accent);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.sched-group-header {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
 .sched-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);

@@ -34,6 +34,12 @@ export function initFromSave() {
             ac.currentLocation = ac.status === 'in_flight' ? null : state.config.hubAirport;
         }
     }
+    // Ensure pairedRouteId exists for older saves
+    for (const route of state.routes) {
+        if (route.pairedRouteId === undefined) {
+            route.pairedRouteId = null;
+        }
+    }
     return state;
 }
 

@@ -581,7 +581,12 @@ function renderRouteCreator() {
         if (route) {
             const createReturn = document.getElementById('rc-return-route').checked;
             if (createReturn) {
-                createRoute(dest, origin);
+                const returnRoute = createRoute(dest, origin);
+                if (returnRoute) {
+                    // Link the paired routes
+                    route.pairedRouteId = returnRoute.id;
+                    returnRoute.pairedRouteId = route.id;
+                }
             }
             renderRouteList();
             renderMap();
@@ -722,10 +727,14 @@ function renderRouteList() {
             }
         }
 
+        const pairedRoute = route.pairedRouteId ? getRouteById(route.pairedRouteId) : null;
+        const pairedLabel = pairedRoute ? `<span class="route-paired-badge" title="Paired with ${pairedRoute.origin} → ${pairedRoute.destination}">\u2194 Paired</span>` : '';
+
         return `
             <div class="route-card">
                 <div class="route-card-header">
-                    <span class="route-pair">${route.origin} \u27F6 ${route.destination}</span>
+                    <span class="route-pair">${route.origin} ${pairedRoute ? '\u2194' : '\u27F6'} ${route.destination}</span>
+                    ${pairedLabel}
                     <span class="route-dist">${route.distance.toLocaleString()} km</span>
                     <span class="route-status ${route.active ? 'active' : 'inactive'}">${route.active ? 'Active' : 'Inactive'}</span>
                 </div>
@@ -761,10 +770,49 @@ function renderRouteList() {
     listDiv.querySelectorAll('[data-delete-route]').forEach(btn => {
         btn.addEventListener('click', () => {
             const id = parseInt(btn.dataset.deleteRoute);
-            if (deleteRoute(id)) {
-                renderRouteList();
-                renderMap();
-                updateHUD();
+            const route = getRouteById(id);
+            if (!route) return;
+
+            const pairedRoute = route.pairedRouteId ? getRouteById(route.pairedRouteId) : null;
+
+            if (pairedRoute) {
+                // Show modal with options: delete both or just this one
+                const body = showModal('Delete Paired Route', `
+                    <p>This route <strong>${route.origin} → ${route.destination}</strong> is paired with <strong>${pairedRoute.origin} → ${pairedRoute.destination}</strong>.</p>
+                    <div class="modal-actions">
+                        <button class="btn-accent" id="del-both-btn">Delete Both Routes</button>
+                        <button class="btn-secondary" id="del-one-btn">Delete This Route Only</button>
+                        <button class="btn-secondary" id="del-cancel-btn">Cancel</button>
+                    </div>
+                `);
+                body.querySelector('#del-both-btn').addEventListener('click', () => {
+                    // Unlink paired route first
+                    pairedRoute.pairedRouteId = null;
+                    deleteRoute(id);
+                    deleteRoute(pairedRoute.id);
+                    closeModal();
+                    renderRouteList();
+                    renderMap();
+                    updateHUD();
+                });
+                body.querySelector('#del-one-btn').addEventListener('click', () => {
+                    // Unlink paired route
+                    pairedRoute.pairedRouteId = null;
+                    deleteRoute(id);
+                    closeModal();
+                    renderRouteList();
+                    renderMap();
+                    updateHUD();
+                });
+                body.querySelector('#del-cancel-btn').addEventListener('click', () => {
+                    closeModal();
+                });
+            } else {
+                if (deleteRoute(id)) {
+                    renderRouteList();
+                    renderMap();
+                    updateHUD();
+                }
             }
         });
     });
@@ -1220,15 +1268,53 @@ function renderScheduleList() {
         return;
     }
 
-    listDiv.innerHTML = state.schedules.map(sched => {
+    // Group schedules by paired routes
+    const rendered = new Set();
+    const groups = [];
+
+    for (const sched of state.schedules) {
+        if (rendered.has(sched.id)) continue;
+        const route = getRouteById(sched.routeId);
+        const pairedRoute = route && route.pairedRouteId ? getRouteById(route.pairedRouteId) : null;
+
+        if (pairedRoute) {
+            // Find all schedules for both paired routes
+            const outbound = state.schedules.filter(s => s.routeId === route.id);
+            const inbound = state.schedules.filter(s => s.routeId === pairedRoute.id);
+            const allInGroup = [...outbound, ...inbound];
+            allInGroup.forEach(s => rendered.add(s.id));
+            groups.push({ paired: true, route, pairedRoute, schedules: outbound, returnSchedules: inbound });
+        } else {
+            rendered.add(sched.id);
+            groups.push({ paired: false, route, schedules: [sched] });
+        }
+    }
+
+    listDiv.innerHTML = groups.map(group => {
+        if (group.paired) {
+            return `
+                <div class="sched-group-paired">
+                    <div class="sched-group-header">\u2194 ${group.route.origin} \u2014 ${group.route.destination} (Paired)</div>
+                    ${group.schedules.map(s => renderSchedCard(s, state)).join('')}
+                    ${group.returnSchedules.length > 0 ? `
+                        <div style="font-size:11px;color:var(--text-muted);padding:4px 0;font-family:var(--font-mono);">Return leg:</div>
+                        ${group.returnSchedules.map(s => renderSchedCard(s, state)).join('')}
+                    ` : ''}
+                </div>
+            `;
+        } else {
+            return group.schedules.map(s => renderSchedCard(s, state)).join('');
+        }
+    }).join('');
+
+    function renderSchedCard(sched, state) {
         const route = getRouteById(sched.routeId);
         const aircraft = state.fleet.find(f => f.id === sched.aircraftId);
         const times = sched.departureTimes.map(t => `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`).join(', ');
-
         return `
             <div class="sched-card">
                 <div class="sched-card-header">
-                    <span>${route ? route.origin + ' → ' + route.destination : 'Unknown route'}</span>
+                    <span>${route ? route.origin + ' \u2192 ' + route.destination : 'Unknown route'}</span>
                     <span>${aircraft ? aircraft.registration + ' (' + aircraft.type + ')' : 'Unknown aircraft'}</span>
                     <span class="sched-mode">${sched.mode}</span>
                 </div>
@@ -1243,7 +1329,7 @@ function renderScheduleList() {
                 </div>
             </div>
         `;
-    }).join('');
+    }
 
     listDiv.querySelectorAll('[data-edit-sched]').forEach(btn => {
         btn.addEventListener('click', () => {
