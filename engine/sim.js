@@ -116,6 +116,12 @@ function processFlightDepartures() {
             if (currentMinutes >= depMinutes && currentMinutes < depMinutes + TICK_MINUTES) {
                 if (aircraft.status !== 'available') continue;
 
+                // Check aircraft is at departure airport
+                if (aircraft.currentLocation && aircraft.currentLocation !== route.origin) {
+                    addLogEntry(`${aircraft.registration} is at ${aircraft.currentLocation} — cannot depart ${route.origin}. Aircraft must return first.`, 'warning');
+                    continue;
+                }
+
                 const isHub = route.origin === state.config.hubAirport;
                 const slotLevel = getSlotControlLevel(route.origin);
                 if (!isHub && slotLevel >= 3 && !checkAndUseSlot(route.origin, currentHour)) {
@@ -177,6 +183,7 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes) {
 
     state.flights.active.push(flight);
     aircraft.status = 'in_flight';
+    aircraft.currentLocation = `airborne:${route.origin}\u2192${route.destination}`;
     state.finances.dailyFlights++;
     state.finances.dailyPassengers += passengers;
 
@@ -214,6 +221,7 @@ function processActiveFlights() {
         const aircraft = state.fleet.find(f => f.id === flight.aircraftId);
         if (aircraft) {
             aircraft.status = 'available';
+            aircraft.currentLocation = flight.destination;
             const flightHours = (flight.arrivalTime - flight.departureTime) / 60;
             aircraft.totalFlightHours += flightHours;
 

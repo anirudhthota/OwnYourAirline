@@ -27,7 +27,8 @@ export function purchaseAircraft(aircraftType) {
         purchaseDate: state.clock.totalMinutes,
         totalFlightHours: 0,
         status: 'available',
-        registration: generateRegistration(state)
+        registration: generateRegistration(state),
+        currentLocation: state.config.hubAirport
     };
 
     state.fleet.push(aircraft);
@@ -57,7 +58,8 @@ export function leaseAircraft(aircraftType) {
         depositPaid: deposit,
         totalFlightHours: 0,
         status: 'available',
-        registration: generateRegistration(state)
+        registration: generateRegistration(state),
+        currentLocation: state.config.hubAirport
     };
 
     state.fleet.push(aircraft);
@@ -265,6 +267,7 @@ export function purchaseUsedAircraft(listingId) {
         totalFlightHours: listing.hoursFlown,
         status: 'available',
         registration: generateRegistration(state),
+        currentLocation: state.config.hubAirport,
         usedAge: listing.ageYears,
         condition: listing.condition
     };
@@ -299,6 +302,7 @@ export function leaseUsedAircraft(listingId) {
         totalFlightHours: listing.hoursFlown,
         status: 'available',
         registration: generateRegistration(state),
+        currentLocation: state.config.hubAirport,
         usedAge: listing.ageYears,
         condition: listing.condition
     };
@@ -322,7 +326,8 @@ export function addFreeAircraftToFleet(aircraftType) {
         purchaseDate: state.clock.totalMinutes,
         totalFlightHours: 0,
         status: 'available',
-        registration: generateRegistration(state)
+        registration: generateRegistration(state),
+        currentLocation: state.config.hubAirport
     };
 
     state.fleet.push(aircraft);

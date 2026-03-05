@@ -1,6 +1,8 @@
 # Own Your Airline — Progress Tracker
 
-## Status: Phase 2 Session B Complete
+## Status: Session C Complete
+
+> **Merge instructions**: Branch `claude/airline-management-simulation-gZVoE` contains all Session C work. Merge into main when ready.
 
 ### Context Files
 
@@ -53,20 +55,53 @@
 
 - **Task 6: Starter Fleet via Used Market** — Used Aircraft Market tab in Fleet panel. 3-5 random aircraft at game start, refreshes every 30 in-game days. Prices 60-80% of new. Each listing: type, age (2-10yr), hours flown, price, condition (Good/Fair). Buy or lease with confirm dialogs. Easy/Medium: A321neo pre-listed at 55% discount. Sandbox: free A321neo in fleet at start.
 
-### In Progress
+### Session C Part 1 (Complete)
 
-- Nothing currently in progress
+- **Task 1: Map Complete Rewrite (Leaflet.js)** — Replaced canvas-based Mercator map with Leaflet + CartoDB Dark Matter tiles. Geodesic great-circle arcs (20 waypoints, spherical interpolation). Player routes: airline color, 80% opacity, 2.5px weight, glow underlayer (6px, 15% opacity). Bidirectional offset in pixel space. AI routes: 0.6px, 15% opacity, max 40 within 3000km of map center, hub-distance sorted. Hub: pulsing CSS animation ring, always visible and labeled. Player destinations: medium circles, labeled zoom 4+. AI hubs: tiny dots zoom 5+. Generic airports: small dots zoom 6+. Live flights: rotated plane character interpolated along geodesic arc with click popup (route, aircraft, dep/arr times, pax). Map controls panel preserved with z-index 1000. Leaflet CDN added to index.html.
 
-### Session C Will Cover
+- **Task 2: Multi-Aircraft Rotation** — Added `currentLocation` field to all aircraft (tracks physical position as IATA code or "airborne:ORIGIN→DEST"). All fleet creation functions (purchase, lease, used buy, used lease, free add) set currentLocation to hub. sim.js enforces location-based departure: aircraft must be at route origin to depart. On launch sets airborne, on arrival sets destination. Backward compatibility for older saves in init.js. Fleet panel shows location next to status. Route cards show assigned aircraft with locations, understaffed warning (min aircraft calculation), stranding warning when no return leg exists. Schedule creator shows minimum aircraft info and location warnings.
 
-- Event system (random events: mechanical issues, strikes, weather delays, demand surges)
-- Alliance system for player
-- Aircraft maintenance model (cycles, downtime, cost)
-- Route profitability detailed breakdown
-- AI competition effects on pricing/demand
-- Passenger class model (Economy/Business/First)
-- Codeshare agreements
-- Achievements/milestones
+- **Task 3: Edit Schedule** — Edit button on each schedule card alongside Delete. Clicking Edit opens pre-populated form with current route, aircraft, mode (Custom/Banked), departure times, and bank assignment. Player can change any value. Save runs full validation via `validateScheduleParams()` which returns ALL errors simultaneously: range check, aircraft location, turnaround enforcement between departures, minimum aircraft for frequency. Errors displayed inline in the form — cannot save until resolved. Validate button checks without saving. `updateSchedule()` replaces existing schedule in place (no duplicate created), handles route reassignment if route changed. Panel refreshes immediately after save.
+
+### Session C Part 2 (Complete)
+
+- **Task 1: Swap Aircraft on a Route** — "Swap Aircraft" button on route cards opens modal showing all fleet with status badges (Available/Busy/Maintenance in green/amber/red), current location, next free time for busy aircraft, range info. Player selects replacement aircraft. `swapAircraftOnRoute()` in scheduler.js validates: range for route distance, location at departure airport, scheduling conflicts, turnaround feasibility. On valid swap: all affected schedules updated in place (aircraftId and blockTimeMinutes). Route stays active throughout — no schedule interruption. On invalid: specific error messages shown, modal stays open. Multi-aircraft routes: dropdown to select which aircraft to replace.
+
+- **Task 2: Scheduling Validation Overhaul** — `createSchedule()` now delegates all validation to `validateScheduleParams()` before any state mutation. Returns `{ schedule, errors }` for proper UI error handling. `updateSchedule()` also validates before mutating. Added scheduling conflict detection: checks if aircraft already has overlapping time windows on other routes. `validateScheduleParams()` accepts optional `excludeScheduleId` so editing a schedule doesn't flag its own existing times as conflicts. Round trip duration included in min-aircraft warning. Schedule creator UI now has Validate button with inline error display matching the editor. All errors shown at once — form stays open until resolved.
+
+- **Task 3: Event Log Auto-Update** — `addLogEntry()` in state.js now dispatches `window.dispatchEvent(new CustomEvent('gameEvent', { detail: entry }))` on every log entry. Log panel listens for events and prepends new entries without re-rendering the whole panel. Pause Log toggle freezes updates during review. Max 200 entries shown in panel. Left border color by log type: system=grey, route=blue, flight=green, finance=amber, slot=orange, ai=purple, bank=teal, error=red, schedule=teal, fleet=purple.
+
+- **Task 4: Return Route UI** — Paired routes linked via `pairedRouteId` field on route objects. Routes created with "Also create return route" checkbox are automatically linked. Route cards show ↔ icon and "Paired" badge for linked routes. Delete paired route prompts: "Delete Both Routes", "Delete This Route Only", or "Cancel". Schedule panel groups paired route schedules together with outbound/return labels. Backward compatibility: `pairedRouteId` initialized to null for older saves in init.js.
+
+### Phase 2 Work Complete
+
+All Phase 2 work across Sessions A, B, C1, and C2 is complete:
+- Directional routes with return route creation
+- Aircraft status tracking and location enforcement
+- Turnaround and scheduling validation
+- Slot system with per-airport control levels
+- Daily P&L with notification and charts
+- Used aircraft market for starter fleet
+- Leaflet.js map with geodesic arcs and live flights
+- Multi-aircraft rotation with physical location tracking
+- Schedule editing with full validation
+- Swap aircraft on routes
+- Comprehensive scheduling validation with conflict detection
+- Real-time event log with auto-update
+- Paired route UI with grouping
+
+### Phase 3 Roadmap
+
+- **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs
+- **Demand Model V2** — AI competition affects demand, seasonal variation, hub connectivity bonus
+- **Codeshare / Alliances** — Partner with AI airlines for feed traffic
+- **Aircraft Upgrades** — Cabin config (economy/business/first), Wi-Fi, seat pitch
+- **Route Profitability Analysis** — Per-route P&L tracking, break-even analysis
+- **Passenger Feedback** — On-time performance, delays affect reputation
+- **Advanced Slot System** — Slot auctions, grandfather rights, use-it-or-lose-it
+- **Fleet Planning** — Order backlog, delivery dates, pre-order discounts
+- **Network Effects** — Connecting passengers via hub, transfer traffic
+- **Achievements / Milestones** — Fleet size goals, revenue targets, route network coverage
 
 ### Decisions
 
@@ -78,21 +113,30 @@
 6. **Depreciation on sell** — Annual depreciation rate plus 15% dealer margin.
 7. **Lease deposits** — Upfront deposit, non-refundable on return.
 8. **AI routes are visual-only** — AI airlines show routes on map but don't compete for slots (simplified for Phase 1-2).
-9. **Map controls as overlay** — Toggles live in collapsible panel over the canvas.
+9. **Map controls as overlay** — Toggles live in collapsible panel over the map.
 10. **Directional routes** — Each route is one-way. A→B and B→A are independent route objects.
 11. **Slot costs are origin-only** — Each direction pays slot fee for its origin airport only. Hub is free.
 12. **Used market for starter fleet** — No free aircraft on Easy/Medium. Used market provides affordable entry point.
 13. **Daily P&L is non-blocking** — Notification auto-dismisses, doesn't pause the game.
+14. **Leaflet.js for map** — External dependency allowed for map rendering. CartoDB Dark Matter tiles. No other external libraries.
+15. **Aircraft physical location tracking** — `currentLocation` field enforces realistic positioning. Aircraft must be at departure airport.
+16. **Schedule edit replaces in place** — No delete+recreate. `updateSchedule()` modifies existing schedule object.
+17. **Paired routes linked by ID** — `pairedRouteId` bidirectional link between outbound and return routes.
+18. **createSchedule returns { schedule, errors }** — Structured return for proper UI error handling instead of null.
+19. **Event-driven log updates** — CustomEvent dispatch avoids full panel re-render on every log entry.
 
 ### Known Issues
 
 1. **AI competition is shallow** — `getAICompetitorsOnRoute` counts but doesn't meaningfully affect demand yet.
 2. **No maintenance system** — Aircraft never need maintenance, no downtime.
-3. **No touch support** — Map pan/zoom is mouse-only.
-4. **Save compatibility** — Saves from Phase 1 may not load correctly. Start new game recommended.
+3. **No touch support** — Leaflet handles touch for map, but other UI elements are mouse-only.
+4. **Save compatibility** — Saves from Phase 1 may not load correctly. Start new game recommended. Phase 2 saves patched for currentLocation and pairedRouteId.
 5. **Delay cascade limited** — Delays propagate to next rotation but don't cascade through full day's schedule.
 6. **Used market RNG** — Market refresh is random, may occasionally offer no useful aircraft types.
 7. **Daily P&L chart doesn't show on first day** — Need at least one full day of operations for data.
+8. **Schedule editor reuses creator div** — Edit form takes over the `sched-creator` div; creating a new schedule while editing requires cancelling first.
+9. **CONTEXT.md references canvas map** — Tech stack section still says "HTML5 Canvas (world map)" — should be updated to mention Leaflet.
+10. **Log listener cleanup** — Log event listener is only cleaned up when log panel re-renders; switching panels leaves listener active (low impact — entries still accumulate in state).
 
 ### Test Checklist
 
@@ -106,24 +150,46 @@
 - [ ] Fleet: used market refreshes after 30 in-game days
 - [ ] Fleet: Sandbox mode starts with free A321neo
 - [ ] Fleet: Easy/Medium mode shows discounted A321neo in used market
+- [ ] Fleet: location displayed next to status badge
 - [ ] Routes: create route, verify one-way direction
 - [ ] Routes: "Also create return route" checkbox creates both directions
+- [ ] Routes: paired routes show ↔ icon and "Paired" badge
+- [ ] Routes: delete paired route prompts: both, one, or cancel
 - [ ] Routes: route info shows slot control level and cost
 - [ ] Routes: slot fee deducted on creation (hub exempt)
 - [ ] Routes: Airports sub-panel shows slot usage per airport
+- [ ] Routes: route cards show assigned aircraft with locations
+- [ ] Routes: understaffed warning when fewer aircraft than required
+- [ ] Routes: stranding warning when no return leg exists
+- [ ] Routes: swap aircraft button opens modal with fleet list
+- [ ] Routes: swap validates range, location, conflicts, turnaround
+- [ ] Routes: successful swap updates schedules in place
 - [ ] Routes: delete route
 - [ ] Schedule: create custom schedule with manual times
 - [ ] Schedule: turnaround validation rejects too-close departures
 - [ ] Schedule: range check shows block time + turnaround
 - [ ] Schedule: aircraft picker shows status badges
 - [ ] Schedule: busy aircraft show next-free time
-- [ ] Flights: launch at scheduled times, dots move on map
-- [ ] Flights: complete with revenue, aircraft freed
+- [ ] Schedule: scheduling conflict detection (overlapping time windows)
+- [ ] Schedule: validate button in creator shows errors without saving
+- [ ] Schedule: edit button opens pre-populated form
+- [ ] Schedule: edit form shows current route, aircraft, mode, times
+- [ ] Schedule: validate button shows all errors without saving
+- [ ] Schedule: save validates and updates in place (no duplicate)
+- [ ] Schedule: paired route schedules grouped together
+- [ ] Schedule: panel refreshes after save
+- [ ] Flights: launch at scheduled times, aircraft must be at origin
+- [ ] Flights: aircraft location set to airborne during flight
+- [ ] Flights: complete with revenue, aircraft location set to destination
 - [ ] Flights: slot delay at Level 3+ airports logged as warning
 - [ ] Flights: delayed flight retries next tick
-- [ ] Map: 14 continent polygons visible, pan/zoom smooth
-- [ ] Map: AI routes capped at 50, viewport culled, 0.08 opacity
+- [ ] Map: Leaflet with CartoDB Dark Matter tiles loads
+- [ ] Map: geodesic arcs for player routes with glow
 - [ ] Map: bidirectional routes show offset arcs
+- [ ] Map: AI routes capped at 40, within 3000km, 0.15 opacity
+- [ ] Map: hub pulsing animation, always labeled
+- [ ] Map: player destinations labeled zoom 4+, AI hubs zoom 5+
+- [ ] Map: live flights as rotated plane with click popup
 - [ ] Map controls: all toggles work including AI routes off
 - [ ] Daily P&L: notification slides in at end of day
 - [ ] Daily P&L: shows flights/pax/revenue/costs/net/best/worst
@@ -131,5 +197,10 @@
 - [ ] Finances: daily P&L bar chart renders (last 30 days)
 - [ ] Finances: running cash balance table shows last 10 days
 - [ ] Finances: monthly P&L table preserved
+- [ ] Log: real-time updates prepend new entries
+- [ ] Log: pause/resume toggle works
+- [ ] Log: max 200 entries shown
+- [ ] Log: left border colors match log type
 - [ ] Save/Load: save game, refresh, continue works
+- [ ] Save/Load: older saves get currentLocation and pairedRouteId patched
 - [ ] DEVMODE: all commands work
