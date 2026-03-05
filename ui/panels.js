@@ -4,7 +4,7 @@ import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlL
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
-import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule, swapAircraftOnRoute } from '../engine/scheduler.js';
+import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule, swapAircraftOnRoute, getProjectedLocation } from '../engine/scheduler.js';
 import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
 import { getSlotUsageForAirport } from '../engine/sim.js';
@@ -1161,9 +1161,9 @@ function renderScheduleCreator() {
                 warnings.push(`${aircraft.registration} is in maintenance. Schedule will activate when maintenance completes.`);
             }
 
-            // Location warning
+            // Location warning — advisory; real validation uses forward projection in validateScheduleParams
             if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
-                warnings.push(`${aircraft.registration} is at ${aircraft.currentLocation} \u2014 cannot depart ${route.origin}. Aircraft must be at the departure airport.`);
+                warnings.push(`${aircraft.registration} is currently at ${aircraft.currentLocation}. A prior scheduled flight must deliver it to ${route.origin} before departure.`);
             }
 
             if (warnings.length > 0) {
@@ -1488,7 +1488,7 @@ function renderScheduleEditor(scheduleId) {
                 warnings.push(`${ac.registration} is in maintenance.`);
             }
             if (ac.currentLocation && ac.currentLocation !== r.origin && !ac.currentLocation.startsWith('airborne:')) {
-                warnings.push(`${ac.registration} is at ${ac.currentLocation} \u2014 cannot depart ${r.origin}.`);
+                warnings.push(`${ac.registration} is currently at ${ac.currentLocation}. A prior scheduled flight must deliver it to ${r.origin} before departure.`);
             }
             if (warnings.length > 0) {
                 acWarning.classList.remove('hidden');
