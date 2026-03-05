@@ -1,6 +1,6 @@
 # Own Your Airline — Progress Tracker
 
-## Status: Session C Complete
+## Status: Session D Complete
 
 > **Merge instructions**: Branch `claude/airline-management-simulation-gZVoE` contains all Session C work. Merge into main when ready.
 
@@ -73,6 +73,16 @@
 
 - **Task 4: Return Route UI** — Paired routes linked via `pairedRouteId` field on route objects. Routes created with "Also create return route" checkbox are automatically linked. Route cards show ↔ icon and "Paired" badge for linked routes. Delete paired route prompts: "Delete Both Routes", "Delete This Route Only", or "Cancel". Schedule panel groups paired route schedules together with outbound/return labels. Backward compatibility: `pairedRouteId` initialized to null for older saves in init.js.
 
+### Session D (Complete)
+
+- **Task 1: CLAUDE.md** — Created session-start instructions file for Claude Code. Read CONTEXT.md, ARCHITECTURE.md, PROGRESS.md first every session. Work rules, data flow rules, commit hygiene.
+
+- **Task 2: Location Validator Bug Fix** — Fixed critical bug where `validateScheduleParams()` and `swapAircraftOnRoute()` checked `aircraft.currentLocation` (snapshot of current position) instead of projecting where the aircraft will be at the proposed departure time. Added `getProjectedLocation(aircraftId, proposedDepMinute, excludeScheduleId)` function that walks through an aircraft's active scheduled flights to determine its position at any given time within the daily cycle. UI warnings in schedule creator/editor changed from blocking "cannot depart" to advisory "currently at X, a prior flight must deliver it." This unblocks return leg creation — e.g., aircraft at HYD with 08:00 HYD→DEL can now schedule 14:00 DEL→HYD.
+
+- **Task 3: Unified Route + Schedule Creation** — Replaced separate "create route" and "create schedule" flows with a single unified screen in the Routes panel. Five sections: (1) Route Setup — origin/dest search, return route checkbox, route info display; (2) Outbound Schedule — aircraft selection with status badges, mode toggle, departure times; (3) Return Schedule — same or different aircraft, mode, times; (4) Flight Numbers — auto-generated `{IATA}{number}` format (e.g., 6E101), editable, uniqueness enforced; (5) Validation Summary — all errors from both directions shown together. Rotation feasibility check validates return departures leave enough time after outbound arrivals + turnaround. "Route Only" button preserved for creating routes without schedules. Existing schedule creator in Schedule panel preserved for adding schedules to existing routes.
+
+- **Task 4: Flight Number System** — Added `flightNumbers[]` array to schedule objects parallel to `departureTimes[]`. Format: `{IATA}{sequential}` starting at 101. `generateFlightNumbers(count)` auto-assigns next available numbers. `getAllUsedFlightNumbers()` checks uniqueness across all schedules. Flight numbers shown in schedule cards, flight objects, and map flight popups. Backward compatibility: older saves auto-get generated flight numbers in `initFromSave()`.
+
 ### Phase 2 Work Complete
 
 All Phase 2 work across Sessions A, B, C1, and C2 is complete:
@@ -124,13 +134,16 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 17. **Paired routes linked by ID** — `pairedRouteId` bidirectional link between outbound and return routes.
 18. **createSchedule returns { schedule, errors }** — Structured return for proper UI error handling instead of null.
 19. **Event-driven log updates** — CustomEvent dispatch avoids full panel re-render on every log entry.
+20. **Forward-projected location validation** — Schedule validation projects where aircraft will be at departure time based on daily schedule, not current snapshot.
+21. **Unified route + schedule creation** — Single form creates route(s) and schedule(s) atomically. Both directions handled together.
+22. **Flight numbers per departure** — `flightNumbers[]` parallel array on schedule objects. Format `{IATA}{number}` starting at 101. Auto-generated, editable, unique.
 
 ### Known Issues
 
 1. **AI competition is shallow** — `getAICompetitorsOnRoute` counts but doesn't meaningfully affect demand yet.
 2. **No maintenance system** — Aircraft never need maintenance, no downtime.
 3. **No touch support** — Leaflet handles touch for map, but other UI elements are mouse-only.
-4. **Save compatibility** — Saves from Phase 1 may not load correctly. Start new game recommended. Phase 2 saves patched for currentLocation and pairedRouteId.
+4. **Save compatibility** — Saves from Phase 1 may not load correctly. Start new game recommended. Phase 2 saves patched for currentLocation, pairedRouteId, and flightNumbers.
 5. **Delay cascade limited** — Delays propagate to next rotation but don't cascade through full day's schedule.
 6. **Used market RNG** — Market refresh is random, may occasionally offer no useful aircraft types.
 7. **Daily P&L chart doesn't show on first day** — Need at least one full day of operations for data.
@@ -202,5 +215,23 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - [ ] Log: max 200 entries shown
 - [ ] Log: left border colors match log type
 - [ ] Save/Load: save game, refresh, continue works
-- [ ] Save/Load: older saves get currentLocation and pairedRouteId patched
+- [ ] Save/Load: older saves get currentLocation, pairedRouteId, and flightNumbers patched
+- [ ] Unified Creator: 5-section form opens from Routes panel "Create Route" button
+- [ ] Unified Creator: origin/dest airport search works
+- [ ] Unified Creator: route info shows distance, fare, competitors, slot levels
+- [ ] Unified Creator: outbound schedule section with aircraft, mode, times
+- [ ] Unified Creator: return schedule section toggles with "return route" checkbox
+- [ ] Unified Creator: "Same aircraft" checkbox syncs return aircraft to outbound
+- [ ] Unified Creator: flight numbers auto-generated in section 4
+- [ ] Unified Creator: flight number inputs are editable
+- [ ] Unified Creator: validation summary shows all errors at once
+- [ ] Unified Creator: "Create Route & Schedule" creates routes + schedules atomically
+- [ ] Unified Creator: "Route Only" creates routes without schedules
+- [ ] Unified Creator: "Validate" button checks without creating
+- [ ] Unified Creator: rotation feasibility check for same-aircraft round trips
+- [ ] Flight Numbers: schedule cards show flight numbers next to departure times
+- [ ] Flight Numbers: flight number uniqueness enforced
+- [ ] Flight Numbers: map flight popup shows flight number
+- [ ] Location Validator: return leg accepted when outbound delivers aircraft to destination
+- [ ] Location Validator: projected location used instead of current snapshot
 - [ ] DEVMODE: all commands work
