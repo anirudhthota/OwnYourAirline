@@ -4,13 +4,13 @@ import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlL
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
-import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule } from '../engine/scheduler.js';
+import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule, swapAircraftOnRoute } from '../engine/scheduler.js';
 import { getTurnaroundTime } from '../data/aircraft.js';
 import { getAICompetitorsOnRoute } from '../engine/aiEngine.js';
 import { getSlotUsageForAirport } from '../engine/sim.js';
 import { updateHUD } from './hud.js';
 import { renderMap } from './map.js';
-import { showConfirm } from './modals.js';
+import { showConfirm, showModal, closeModal } from './modals.js';
 
 function formatLocation(ac) {
     if (!ac.currentLocation) return '';
@@ -751,6 +751,7 @@ function renderRouteList() {
                 ${minAcWarning}
                 ${strandWarning}
                 <div class="route-card-actions">
+                    ${assignedAircraft.length > 0 ? `<button class="btn-sm" data-swap-route="${route.id}">Swap Aircraft</button>` : ''}
                     <button class="btn-sm btn-danger" data-delete-route="${route.id}">Delete</button>
                 </div>
             </div>
@@ -764,6 +765,120 @@ function renderRouteList() {
                 renderRouteList();
                 renderMap();
                 updateHUD();
+            }
+        });
+    });
+
+    listDiv.querySelectorAll('[data-swap-route]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const routeId = parseInt(btn.dataset.swapRoute);
+            openSwapAircraftModal(routeId);
+        });
+    });
+}
+
+function openSwapAircraftModal(routeId) {
+    const state = getState();
+    const route = getRouteById(routeId);
+    if (!route) return;
+
+    const schedules = getSchedulesByRoute(routeId);
+    const assignedAcIds = [...new Set(schedules.map(s => s.aircraftId))];
+
+    // Build aircraft list HTML
+    const acListHtml = state.fleet.map(ac => {
+        const acData = getAircraftByType(ac.type);
+        const isAssigned = assignedAcIds.includes(ac.id);
+
+        // Status badge
+        let statusClass, statusLabel;
+        if (ac.status === 'available') {
+            statusClass = 'swap-status-available';
+            statusLabel = 'Available';
+        } else if (ac.status === 'in_flight') {
+            statusClass = 'swap-status-busy';
+            statusLabel = 'Busy';
+        } else {
+            statusClass = 'swap-status-maint';
+            statusLabel = 'Maintenance';
+        }
+
+        // Next free time for busy aircraft
+        let nextFreeLabel = '';
+        if (ac.status === 'in_flight') {
+            const nextFree = getAircraftNextFree(ac.id);
+            if (nextFree != null) {
+                const gt = getGameTime(nextFree);
+                nextFreeLabel = `Free at D${(gt.week - 1) * 7 + gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+            }
+        }
+
+        const locationStr = formatLocation(ac);
+
+        return `
+            <div class="swap-ac-row ${isAssigned ? 'swap-ac-current' : ''}" data-ac-id="${ac.id}">
+                <div class="swap-ac-info">
+                    <span class="swap-ac-reg">${ac.registration}</span>
+                    <span class="swap-ac-type">${ac.type} (${acData ? acData.seats + ' seats' : ''})</span>
+                    <span class="swap-ac-badge ${statusClass}">${statusLabel}</span>
+                </div>
+                <div class="swap-ac-details">
+                    <span>${locationStr}</span>
+                    ${acData ? `<span>Range: ${acData.rangeKm.toLocaleString()}km</span>` : ''}
+                    ${nextFreeLabel ? `<span>${nextFreeLabel}</span>` : ''}
+                    ${isAssigned ? '<span style="color:var(--accent-blue);">Currently assigned</span>' : ''}
+                </div>
+                ${!isAssigned ? `<button class="btn-sm btn-accent swap-select-btn" data-swap-ac="${ac.id}">Select</button>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    // Build old aircraft selector if multiple assigned
+    let oldAcSelectorHtml = '';
+    if (assignedAcIds.length > 1) {
+        const assignedAircraft = assignedAcIds.map(id => state.fleet.find(f => f.id === id)).filter(Boolean);
+        oldAcSelectorHtml = `
+            <div class="form-row" style="margin-bottom:12px;">
+                <label>Replace which aircraft?</label>
+                <select id="swap-old-ac">
+                    ${assignedAircraft.map(ac => `<option value="${ac.id}">${ac.registration} (${ac.type})</option>`).join('')}
+                </select>
+            </div>
+        `;
+    }
+
+    const body = showModal(`Swap Aircraft — ${route.origin} → ${route.destination}`, `
+        ${oldAcSelectorHtml}
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Select replacement aircraft:</div>
+        <div class="swap-ac-list">${acListHtml}</div>
+        <div id="swap-errors" class="validation-errors hidden"></div>
+    `);
+
+    // Wire up select buttons
+    body.querySelectorAll('.swap-select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const newAcId = parseInt(btn.dataset.swapAc);
+
+            // Determine old aircraft
+            let oldAcId;
+            if (assignedAcIds.length === 1) {
+                oldAcId = assignedAcIds[0];
+            } else {
+                const selector = document.getElementById('swap-old-ac');
+                oldAcId = parseInt(selector.value);
+            }
+
+            const result = swapAircraftOnRoute(routeId, oldAcId, newAcId);
+            const errDiv = body.querySelector('#swap-errors');
+
+            if (result.success) {
+                closeModal();
+                renderRouteList();
+                renderMap();
+                updateHUD();
+            } else {
+                errDiv.classList.remove('hidden');
+                errDiv.innerHTML = result.errors.map(e => `<div class="validation-error-item">${e}</div>`).join('');
             }
         });
     });

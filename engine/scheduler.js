@@ -1,4 +1,4 @@
-import { getState, addLogEntry } from './state.js';
+import { getState, addLogEntry, getGameTime } from './state.js';
 import { getRouteById, calculateBlockTime, canAircraftFlyRoute } from './routeEngine.js';
 import { getAircraftByType, getTurnaroundTime } from '../data/aircraft.js';
 
@@ -354,6 +354,83 @@ export function calculateMinAircraft(routeDistance, aircraftType, frequency) {
     const slotsPerAircraft = Math.floor(operatingDay / cycleTime);
     if (slotsPerAircraft <= 0) return frequency;
     return Math.ceil(frequency / slotsPerAircraft);
+}
+
+export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
+    const state = getState();
+    const route = getRouteById(routeId);
+    if (!route) return { success: false, errors: ['Route not found'] };
+
+    const oldAc = state.fleet.find(f => f.id === oldAircraftId);
+    const newAc = state.fleet.find(f => f.id === newAircraftId);
+    if (!oldAc) return { success: false, errors: ['Old aircraft not found'] };
+    if (!newAc) return { success: false, errors: ['New aircraft not found'] };
+
+    const newAcData = getAircraftByType(newAc.type);
+    const errors = [];
+
+    // Range check
+    if (!canAircraftFlyRoute(newAc.type, route.distance)) {
+        errors.push(`${newAcData.type} cannot fly ${route.origin}→${route.destination}: range ${newAcData.rangeKm}km < distance ${route.distance}km`);
+    }
+
+    // Location check
+    if (newAc.currentLocation && newAc.currentLocation !== route.origin && !newAc.currentLocation.startsWith('airborne:')) {
+        errors.push(`${newAc.registration} is at ${newAc.currentLocation} — must be at ${route.origin} to serve this route`);
+    }
+
+    // Check if new aircraft is currently in flight
+    if (newAc.status === 'in_flight') {
+        const nextFree = state.flights.active.find(f => f.aircraftId === newAircraftId);
+        if (nextFree) {
+            const gt = getGameTime(nextFree.arrivalTime);
+            errors.push(`${newAc.registration} is airborne until Day ${(gt.week - 1) * 7 + gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`);
+        }
+    }
+
+    // Check scheduling conflicts — does new aircraft already have schedules that overlap?
+    const affectedSchedules = state.schedules.filter(s => s.routeId === routeId && s.aircraftId === oldAircraftId);
+    if (affectedSchedules.length === 0) {
+        errors.push('No schedules found for this aircraft on this route');
+    }
+
+    // Turnaround feasibility for each affected schedule with new aircraft
+    if (errors.length === 0) {
+        const newBlockTime = calculateBlockTime(route.distance, newAc.type);
+        const newTurnaround = getTurnaroundTime(newAc.type);
+
+        for (const sched of affectedSchedules) {
+            if (sched.departureTimes.length > 1) {
+                const sortedMinutes = sched.departureTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
+                for (let i = 1; i < sortedMinutes.length; i++) {
+                    const gap = sortedMinutes[i] - sortedMinutes[i - 1];
+                    const needed = newBlockTime + newTurnaround;
+                    if (gap < needed) {
+                        const arrH = Math.floor((sortedMinutes[i - 1] + newBlockTime) / 60) % 24;
+                        const arrM = (sortedMinutes[i - 1] + newBlockTime) % 60;
+                        errors.push(
+                            `${newAc.registration} turnaround conflict on schedule #${sched.id}: arrives ${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}, needs ${newTurnaround}min ground time, but next departure at ${String(Math.floor(sortedMinutes[i] / 60)).padStart(2, '0')}:${String(sortedMinutes[i] % 60).padStart(2, '0')}`
+                        );
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (errors.length > 0) return { success: false, errors };
+
+    // Perform the swap
+    const newBlockTime = calculateBlockTime(route.distance, newAc.type);
+    let swapped = 0;
+    for (const sched of affectedSchedules) {
+        sched.aircraftId = newAircraftId;
+        sched.blockTimeMinutes = newBlockTime;
+        swapped++;
+    }
+
+    addLogEntry(`Aircraft swapped on ${route.origin}→${route.destination}: ${oldAc.registration} → ${newAc.registration} (${swapped} schedule(s))`, 'schedule');
+    return { success: true, errors: [], swapped };
 }
 
 function formatBankTime(t) {

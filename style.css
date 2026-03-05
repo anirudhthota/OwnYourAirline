@@ -1613,6 +1613,76 @@ html, body {
     margin-top: 16px;
 }
 
+/* ===== Swap Aircraft Modal ===== */
+.swap-ac-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.swap-ac-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.swap-ac-row:hover { background: var(--bg-hover); }
+
+.swap-ac-current {
+    border-color: var(--accent-blue);
+    background: rgba(0, 170, 255, 0.05);
+}
+
+.swap-ac-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 220px;
+}
+
+.swap-ac-reg {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--accent-blue);
+}
+
+.swap-ac-type {
+    color: var(--text-secondary);
+}
+
+.swap-ac-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.swap-status-available { background: rgba(0, 230, 118, 0.1); color: var(--accent-green); }
+.swap-status-busy { background: rgba(255, 193, 7, 0.1); color: var(--accent-yellow); }
+.swap-status-maint { background: rgba(255, 68, 68, 0.1); color: var(--accent-red); }
+
+.swap-ac-details {
+    display: flex;
+    gap: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    flex: 1;
+}
+
+.swap-select-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 /* ======= RESPONSIVE ======= */
 @media (max-width: 768px) {
     .hud {
