@@ -1530,6 +1530,7 @@ html, body {
     padding: 4px 8px;
     font-size: 12px;
     border-radius: 2px;
+    border-left: 3px solid #666;
 }
 
 .log-entry:hover { background: var(--bg-tertiary); }

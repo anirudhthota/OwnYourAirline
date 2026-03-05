@@ -145,14 +145,17 @@ export function setState(newState) {
 
 export function addLogEntry(message, type = 'info') {
     if (!gameState) return;
-    gameState.log.unshift({
+    const entry = {
         timestamp: gameState.clock.totalMinutes,
         message,
         type
-    });
+    };
+    gameState.log.unshift(entry);
     if (gameState.log.length > 500) {
         gameState.log.length = 500;
     }
+    // Dispatch event for real-time log panel updates
+    window.dispatchEvent(new CustomEvent('gameEvent', { detail: entry }));
 }
 
 export function deductCash(amount, description) {
