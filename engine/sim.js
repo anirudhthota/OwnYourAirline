@@ -79,8 +79,10 @@ function processDelayedFlights() {
 
         if (checkAndUseSlot(route.origin, currentHour)) {
             delayed.delayMinutes += TICK_MINUTES;
+            const dIdx = schedule.departureTimes.indexOf(delayed.depTime);
+            const dFlightNumber = schedule.flightNumbers && schedule.flightNumbers[dIdx] ? schedule.flightNumbers[dIdx] : null;
             addLogEntry(`Delayed flight ${route.origin}→${route.destination} now departing (${delayed.delayMinutes}min late)`, 'warning');
-            launchFlight(schedule, route, aircraft, delayed.depTime, delayed.delayMinutes);
+            launchFlight(schedule, route, aircraft, delayed.depTime, delayed.delayMinutes, dFlightNumber);
         } else {
             delayed.delayMinutes += TICK_MINUTES;
             if (delayed.delayMinutes >= 120) {
@@ -139,13 +141,15 @@ function processFlightDepartures() {
                     checkAndUseSlot(route.origin, currentHour);
                 }
 
-                launchFlight(schedule, route, aircraft, depTime, 0);
+                const depIdx = schedule.departureTimes.indexOf(depTime);
+                const flightNumber = schedule.flightNumbers && schedule.flightNumbers[depIdx] ? schedule.flightNumbers[depIdx] : null;
+                launchFlight(schedule, route, aircraft, depTime, 0, flightNumber);
             }
         }
     }
 }
 
-function launchFlight(schedule, route, aircraft, depTime, delayMinutes) {
+function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNumber) {
     const state = getState();
     const acData = getAircraftByType(aircraft.type);
     if (!acData) return;
@@ -161,6 +165,7 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes) {
 
     const flight = {
         id: state.flights.nextFlightId++,
+        flightNumber: flightNumber || null,
         routeId: route.id,
         scheduleId: schedule.id,
         aircraftId: aircraft.id,

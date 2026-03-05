@@ -3,6 +3,7 @@ import { initializeAIAirlines } from './aiEngine.js';
 import { generateUsedMarketListings, addFreeAircraftToFleet } from './fleetManager.js';
 import { setGameSpeed, setTickCallback, setMonthCallback, setDayEndCallback } from './sim.js';
 import { GAME_SPEEDS } from './state.js';
+import { generateFlightNumbers } from './scheduler.js';
 
 export function initNewGame(config) {
     const state = createInitialState(config);
@@ -38,6 +39,12 @@ export function initFromSave() {
     for (const route of state.routes) {
         if (route.pairedRouteId === undefined) {
             route.pairedRouteId = null;
+        }
+    }
+    // Ensure flightNumbers exist for older saves
+    for (const sched of state.schedules) {
+        if (!sched.flightNumbers) {
+            sched.flightNumbers = generateFlightNumbers(sched.departureTimes.length);
         }
     }
     return state;

@@ -554,9 +554,10 @@ function drawActiveFlights() {
 
         const depTime = formatGameTimestamp(flight.departureTime);
         const arrTime = formatGameTimestamp(flight.arrivalTime);
+        const fnLabel = flight.flightNumber ? `<strong>${flight.flightNumber}</strong> ` : '';
         const tooltipHtml = `
             <div class="flight-tip-content">
-                <strong>${flight.origin} \u2192 ${flight.destination}</strong><br>
+                ${fnLabel}<strong>${flight.origin} \u2192 ${flight.destination}</strong><br>
                 ${flight.aircraftType} (${flight.registration})<br>
                 Dep: ${depTime}<br>
                 Arr: ${arrTime}<br>

@@ -1278,6 +1278,76 @@ html, body {
     color: var(--text-muted);
 }
 
+/* Unified Creator */
+.unified-creator {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.uc-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px 14px;
+}
+
+.uc-section-title {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--accent-blue);
+    margin: 0 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.uc-fn-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.uc-fn-group {
+    margin-bottom: 8px;
+}
+
+.uc-fn-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.uc-fn-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 0;
+}
+
+.uc-fn-time {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-secondary);
+    min-width: 50px;
+}
+
+.uc-fn-input {
+    width: 80px;
+    padding: 4px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+}
+
+.uc-fn-input:focus {
+    border-color: var(--border-accent);
+}
+
 /* Schedules */
 .sched-creator, .bank-creator {
     background: var(--bg-card);

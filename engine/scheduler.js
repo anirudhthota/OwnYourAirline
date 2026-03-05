@@ -7,6 +7,46 @@ export const SCHEDULE_MODE = {
     BANKED: 'BANKED'
 };
 
+/**
+ * Returns all flight numbers currently in use across all schedules.
+ */
+export function getAllUsedFlightNumbers() {
+    const state = getState();
+    const used = new Set();
+    for (const sched of state.schedules) {
+        if (sched.flightNumbers) {
+            for (const fn of sched.flightNumbers) {
+                if (fn) used.add(fn);
+            }
+        }
+    }
+    return used;
+}
+
+/**
+ * Generates the next available flight number(s) for a schedule.
+ * Format: {IATA}{number} e.g., "6E101", "6E102"
+ * Numbers start at 101 and increment.
+ * @param {number} count - How many flight numbers to generate
+ * @returns {string[]} Array of flight number strings
+ */
+export function generateFlightNumbers(count) {
+    const state = getState();
+    const iata = state.config.iataCode;
+    const used = getAllUsedFlightNumbers();
+    const result = [];
+    let num = 101;
+    while (result.length < count) {
+        const fn = `${iata}${num}`;
+        if (!used.has(fn)) {
+            result.push(fn);
+            used.add(fn); // prevent duplicates within this batch
+        }
+        num++;
+    }
+    return result;
+}
+
 export function createBank(name, startHour, startMinute, endHour, endMinute) {
     const state = getState();
 
@@ -48,7 +88,7 @@ export function deleteBank(bankId) {
     return true;
 }
 
-export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId) {
+export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId, flightNumbers) {
     const state = getState();
 
     // Validate all params first — no state mutation until all checks pass
@@ -77,6 +117,11 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
 
     const blockTime = calculateBlockTime(route.distance, aircraft.type);
 
+    // Auto-generate flight numbers if not provided
+    const fnums = flightNumbers && flightNumbers.length === times.length
+        ? flightNumbers
+        : generateFlightNumbers(times.length);
+
     const schedule = {
         id: state.nextScheduleId++,
         routeId,
@@ -84,6 +129,7 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
         mode,
         bankId: bankId || null,
         departureTimes: times,
+        flightNumbers: fnums,
         blockTimeMinutes: blockTime,
         active: true,
         createdDate: state.clock.totalMinutes
@@ -148,10 +194,8 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
         errors.push(`${acData.type} cannot fly ${route.origin}-${route.destination}: range ${acData.rangeKm}km < distance ${route.distance}km`);
     }
 
-    // Location check
-    if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
-        errors.push(`${aircraft.registration} is at ${aircraft.currentLocation} — cannot depart ${route.origin}`);
-    }
+    // Location check — use forward projection for each proposed departure time
+    // Defer detailed per-time location checks until after times are resolved (below)
 
     let times = [];
     if (mode === SCHEDULE_MODE.CUSTOM) {
@@ -169,6 +213,22 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
                 errors.push('Connection bank not found');
             }
         }
+    }
+
+    // Location check — project where aircraft will be at each proposed departure time
+    if (times.length > 0) {
+        // Check the earliest departure — that's where the aircraft needs to be
+        const earliestTime = times[0];
+        const earliestDepMin = earliestTime.hour * 60 + earliestTime.minute;
+        const projectedLoc = getProjectedLocation(aircraftId, earliestDepMin, excludeScheduleId);
+        if (projectedLoc && projectedLoc !== route.origin && projectedLoc !== 'airborne') {
+            errors.push(`${aircraft.registration} will be at ${projectedLoc} at ${String(earliestTime.hour).padStart(2, '0')}:${String(earliestTime.minute).padStart(2, '0')} — cannot depart ${route.origin}`);
+        } else if (projectedLoc === 'airborne') {
+            errors.push(`${aircraft.registration} will be airborne at ${String(earliestTime.hour).padStart(2, '0')}:${String(earliestTime.minute).padStart(2, '0')} — cannot depart ${route.origin}`);
+        }
+    } else if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
+        // Fallback for banked mode where times aren't resolved yet
+        errors.push(`${aircraft.registration} is at ${aircraft.currentLocation} — cannot depart ${route.origin}`);
     }
 
     // Turnaround validation
@@ -230,7 +290,7 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
     return errors;
 }
 
-export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureTimes, bankId) {
+export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureTimes, bankId, flightNumbers) {
     const state = getState();
     const schedule = state.schedules.find(s => s.id === scheduleId);
     if (!schedule) {
@@ -276,6 +336,9 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
     schedule.mode = mode;
     schedule.bankId = bankId || null;
     schedule.departureTimes = times;
+    schedule.flightNumbers = flightNumbers && flightNumbers.length === times.length
+        ? flightNumbers
+        : generateFlightNumbers(times.length);
     schedule.blockTimeMinutes = blockTime;
 
     // Add to new route's schedule list
@@ -364,8 +427,25 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
         errors.push(`${newAcData.type} cannot fly ${route.origin}→${route.destination}: range ${newAcData.rangeKm}km < distance ${route.distance}km`);
     }
 
-    // Location check
-    if (newAc.currentLocation && newAc.currentLocation !== route.origin && !newAc.currentLocation.startsWith('airborne:')) {
+    // Location check — project where new aircraft will be at earliest departure time
+    const affectedSchedsForLoc = state.schedules.filter(s => s.routeId === routeId && s.aircraftId === oldAircraftId);
+    if (affectedSchedsForLoc.length > 0) {
+        let earliestDepMin = Infinity;
+        for (const sched of affectedSchedsForLoc) {
+            for (const t of sched.departureTimes) {
+                const depMin = t.hour * 60 + t.minute;
+                if (depMin < earliestDepMin) earliestDepMin = depMin;
+            }
+        }
+        if (earliestDepMin < Infinity) {
+            const projectedLoc = getProjectedLocation(newAircraftId, earliestDepMin, null);
+            if (projectedLoc && projectedLoc !== route.origin && projectedLoc !== 'airborne') {
+                errors.push(`${newAc.registration} will be at ${projectedLoc} at ${String(Math.floor(earliestDepMin / 60)).padStart(2, '0')}:${String(earliestDepMin % 60).padStart(2, '0')} — must be at ${route.origin} to serve this route`);
+            } else if (projectedLoc === 'airborne') {
+                errors.push(`${newAc.registration} will be airborne at ${String(Math.floor(earliestDepMin / 60)).padStart(2, '0')}:${String(earliestDepMin % 60).padStart(2, '0')} — must be at ${route.origin}`);
+            }
+        }
+    } else if (newAc.currentLocation && newAc.currentLocation !== route.origin && !newAc.currentLocation.startsWith('airborne:')) {
         errors.push(`${newAc.registration} is at ${newAc.currentLocation} — must be at ${route.origin} to serve this route`);
     }
 
@@ -421,6 +501,71 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
 
     addLogEntry(`Aircraft swapped on ${route.origin}→${route.destination}: ${oldAc.registration} → ${newAc.registration} (${swapped} schedule(s))`, 'schedule');
     return { success: true, errors: [], swapped };
+}
+
+/**
+ * Projects where an aircraft will be at a given departure time within a daily schedule.
+ * Walks through all active scheduled flights for this aircraft sorted by departure time,
+ * and determines the location after the last flight that would have arrived before proposedDepMinute.
+ *
+ * @param {number} aircraftId
+ * @param {number} proposedDepMinute - minute of day (0-1439) for the proposed departure
+ * @param {number|null} excludeScheduleId - schedule to exclude (for edit mode)
+ * @returns {string} projected IATA location code, or "airborne" if mid-flight
+ */
+export function getProjectedLocation(aircraftId, proposedDepMinute, excludeScheduleId) {
+    const state = getState();
+    const aircraft = state.fleet.find(f => f.id === aircraftId);
+    if (!aircraft) return null;
+
+    // Start with the aircraft's current physical location
+    let location = aircraft.currentLocation;
+    if (!location || location.startsWith('airborne:')) {
+        // If airborne right now, we can't reliably project — let the flight complete
+        return location || null;
+    }
+
+    // Gather all scheduled flights for this aircraft (excluding the one being edited)
+    const schedules = state.schedules.filter(
+        s => s.aircraftId === aircraftId && s.active && s.id !== excludeScheduleId
+    );
+
+    // Build a sorted list of (depMinute, arrivalMinute, destination) for the day
+    const dailyFlights = [];
+    for (const sched of schedules) {
+        const route = getRouteById(sched.routeId);
+        if (!route) continue;
+        for (const t of sched.departureTimes) {
+            const depMin = t.hour * 60 + t.minute;
+            const arrMin = depMin + sched.blockTimeMinutes;
+            dailyFlights.push({
+                depMinute: depMin,
+                arrivalMinute: arrMin,
+                origin: route.origin,
+                destination: route.destination
+            });
+        }
+    }
+
+    // Sort by departure time
+    dailyFlights.sort((a, b) => a.depMinute - b.depMinute);
+
+    // Walk through flights that depart before the proposed time
+    for (const flight of dailyFlights) {
+        if (flight.depMinute >= proposedDepMinute) {
+            // This flight departs at or after our proposed time — stop here
+            break;
+        }
+        if (flight.arrivalMinute <= proposedDepMinute) {
+            // Flight has arrived before proposed departure — aircraft is at destination
+            location = flight.destination;
+        } else {
+            // Flight departed but hasn't arrived yet — aircraft is airborne
+            return 'airborne';
+        }
+    }
+
+    return location;
 }
 
 function formatBankTime(t) {
