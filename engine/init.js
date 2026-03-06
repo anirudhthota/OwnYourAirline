@@ -56,6 +56,10 @@ export function initFromSave() {
             sched.flightNumbers = generateFlightNumbers(sched.departureTimes.length);
         }
     }
+    // Ensure transfer caching structures exist
+    if (!state.transfers) {
+        state.transfers = { flowRates: {}, lastCalculatedDay: -1 };
+    }
     return state;
 }
 

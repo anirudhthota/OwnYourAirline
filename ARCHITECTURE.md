@@ -100,6 +100,10 @@ engine/ files              ui/ files
     },
     slots: {},                      // { "IATA_hour": count }
     delayedFlights: [],             // flights waiting for slots or aircraft availability (prevents silent cascades)
+    transfers: {
+        flowRates: {},              // [TRANSIENT CACHE] O->D demand throughput cache for "A-B" keys. Stripped during saves.
+        lastCalculatedDay: -1       // Tracks the last recalculation loop to save performance
+    },
     usedMarket: {
         listings: [],               // used aircraft for sale
         lastRefreshDay: 0,

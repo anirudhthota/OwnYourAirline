@@ -106,6 +106,11 @@ export function createInitialState(config) {
         slots: {},
         delayedFlights: [],
 
+        transfers: {
+            flowRates: {},         // Caches O->D demand throughput "A-B": { demand: 50, penalty: 0.4 }
+            lastCalculatedDay: -1  // Tracks the last day this was rebuilt to save performance
+        },
+
         usedMarket: {
             listings: [],
             lastRefreshDay: 0,
@@ -213,6 +218,13 @@ export function saveGame() {
     if (!gameState) return;
     const saveData = JSON.parse(JSON.stringify(gameState));
     saveData.clock.tickInterval = null;
+    
+    // Clear out transient computation caches to save localStorage size
+    if (saveData.transfers) {
+        saveData.transfers.flowRates = {};
+        saveData.transfers.lastCalculatedDay = -1;
+    }
+
     localStorage.setItem('ownYourAirline_save', JSON.stringify(saveData));
     addLogEntry('Game saved', 'system');
 }
@@ -223,6 +235,14 @@ export function loadGame() {
     const data = JSON.parse(raw);
     data.clock.tickInterval = null;
     data.clock.speed = GAME_SPEEDS.PAUSED;
+    
+    // Ensure transient caches are spun up empty on load
+    if (!data.transfers) {
+        data.transfers = { flowRates: {}, lastCalculatedDay: -1 };
+    } else {
+        data.transfers.flowRates = {};
+        data.transfers.lastCalculatedDay = -1;
+    }
     gameState = data;
     return gameState;
 }

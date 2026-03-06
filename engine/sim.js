@@ -4,6 +4,7 @@ import { getAirportByIata, getSlotControlLevel } from '../data/airports.js';
 import { calculateLoadFactor, calculateFlightRevenue, calculateFlightCost, getRouteById, getTotalDailySeatsOnRoute } from './routeEngine.js';
 import { processMonthlyLeaseCosts, checkUsedMarketRefresh } from './fleetManager.js';
 import { monthlyAIExpansion } from './aiEngine.js';
+import { recalculateTransferDemand } from './transfers.js';
 
 let tickCallback = null;
 let monthCallback = null;
@@ -180,11 +181,66 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNu
     const departureMinute = state.clock.totalMinutes;
     const arrivalMinute = departureMinute + schedule.blockTimeMinutes;
 
+    // --- Step 1: Base Local Passengers Board FIRST ---
     const totalSeats = getTotalDailySeatsOnRoute(route.id);
-    const loadFactor = calculateLoadFactor(route, totalSeats);
-    const revenue = calculateFlightRevenue(route, acData.seats, loadFactor);
+    const localLoadFactor = calculateLoadFactor(route, totalSeats);
+    const localPassengers = Math.round(acData.seats * localLoadFactor);
+    let remainingSeatsAfterLocal = Math.max(0, acData.seats - localPassengers);
+
+    // --- Step 2: Transfer Demand Injection on REMAINING Seats ---
+    let transferPassengers = 0;
+    
+    for (const [routeKey, flowData] of Object.entries(state.transfers.flowRates)) {
+        const isInbound = flowData.inboundRouteId === route.id;
+        const isOutbound = flowData.outboundRouteId === route.id;
+        if (!isInbound && !isOutbound) continue;
+        if (flowData.potentialTransferDemand <= 0) continue;
+
+        // Initialize tracked boarding metrics on the cache object dynamically if missing
+        if (flowData.inboundDemandBoarded === undefined) flowData.inboundDemandBoarded = 0;
+        if (flowData.outboundDemandBoarded === undefined) flowData.outboundDemandBoarded = 0;
+
+        const otherRouteId = isInbound ? flowData.outboundRouteId : flowData.inboundRouteId;
+        const otherRoute = getRouteById(otherRouteId);
+        if (!otherRoute) continue;
+
+        // Calculate global daily abstract capacity for the counterpart leg to cross-leg check
+        const otherTotalSeats = getTotalDailySeatsOnRoute(otherRoute.id);
+        const otherLocalLF = calculateLoadFactor(otherRoute, otherTotalSeats);
+        const otherRemainingGlobally = Math.max(0, otherTotalSeats - Math.round(otherTotalSeats * otherLocalLF));
+
+        const currentlyBoardedType = isInbound ? flowData.inboundDemandBoarded : flowData.outboundDemandBoarded;
+        const remainingDemand = Math.max(0, flowData.potentialTransferDemand - currentlyBoardedType);
+
+        // Passengers may only board if both legs abstractly have available seats this day
+        const boardedTransfers = Math.min(
+            remainingSeatsAfterLocal, 
+            otherRemainingGlobally, 
+            remainingDemand
+        );
+
+        if (boardedTransfers > 0) {
+            transferPassengers += boardedTransfers;
+            remainingSeatsAfterLocal -= boardedTransfers;
+
+            // Track cache independently so asynchronous flight launches don't steal from each other
+            if (isInbound) {
+                flowData.inboundDemandBoarded += boardedTransfers;
+            } else {
+                flowData.outboundDemandBoarded += boardedTransfers;
+            }
+        }
+    }
+
+    // --- Step 3: Final Flight Totals ---
+    const totalBoarded = localPassengers + transferPassengers;
+    
+    // Revenue applies identically to both transfer and local pools for V1
+    const revenue = Math.round(totalBoarded * route.baseFare);
     const cost = calculateFlightCost(route, aircraft.type);
-    const passengers = Math.round(acData.seats * loadFactor);
+    
+    // Exact structural load factor accounting for transfers
+    const finalLoadFactor = acData.seats > 0 ? totalBoarded / acData.seats : 0;
 
     const flight = {
         id: state.flights.nextFlightId++,
@@ -199,8 +255,9 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNu
         departureTime: departureMinute,
         arrivalTime: arrivalMinute,
         distance: route.distance,
-        passengers,
-        loadFactor,
+        passengers: totalBoarded,
+        transferPassengers,
+        loadFactor: finalLoadFactor,
         revenue,
         cost,
         profit: revenue - cost,
@@ -213,7 +270,7 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNu
     aircraft.status = 'in_flight';
     aircraft.currentLocation = `airborne:${route.origin}\u2192${route.destination}`;
     state.finances.dailyFlights++;
-    state.finances.dailyPassengers += passengers;
+    state.finances.dailyPassengers += totalBoarded;
 
     const delayNote = delayMinutes > 0 ? ` (delayed ${delayMinutes}min)` : '';
     deductCash(cost, `Flight ${route.origin}→${route.destination} (${aircraft.registration})${delayNote}`);
@@ -422,6 +479,7 @@ function processDayEnd(prevTotalMinutes) {
     state.finances.dailyPassengers = 0;
 
     checkUsedMarketRefresh();
+    recalculateTransferDemand();
 
     if (dayEndCallback) dayEndCallback(dailyRecord);
 }
