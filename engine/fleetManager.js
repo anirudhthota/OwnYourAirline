@@ -1,5 +1,6 @@
 import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR, MINUTES_PER_DAY } from './state.js';
 import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
+import { AIRPORTS } from '../data/airports.js';
 import { getSchedulesByAircraft } from './scheduler.js';
 
 export const OWNERSHIP_TYPE = {
@@ -193,13 +194,15 @@ export function generateUsedMarketListings(includeDiscountA321) {
 
     for (let i = 0; i < count; i++) {
         const acData = available[Math.floor(Math.random() * available.length)];
-        market.listings.push(createUsedListing(acData, market));
+        const randomAirport = AIRPORTS[Math.floor(Math.random() * AIRPORTS.length)];
+        market.listings.push(createUsedListing(acData, market, randomAirport.iata));
     }
 
     if (includeDiscountA321) {
         const a321 = getAircraftByType('A321neo');
         if (a321) {
-            const listing = createUsedListing(a321, market);
+            const randomAirport = AIRPORTS[Math.floor(Math.random() * AIRPORTS.length)];
+            const listing = createUsedListing(a321, market, randomAirport.iata);
             listing.priceMultiplier = 0.55;
             listing.price = Math.round(a321.purchasePrice * 0.55);
             listing.leasePrice = Math.round(a321.leaseCostPerMonth * 0.6);
@@ -211,7 +214,7 @@ export function generateUsedMarketListings(includeDiscountA321) {
     market.lastRefreshDay = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY);
 }
 
-function createUsedListing(acData, market) {
+function createUsedListing(acData, market, locationIata) {
     const ageYears = 2 + Math.floor(Math.random() * 9); // 2-10 years
     const hoursFlown = Math.round(ageYears * (1500 + Math.random() * 2000));
     const priceMultiplier = 0.60 + Math.random() * 0.20; // 60-80%
@@ -231,6 +234,7 @@ function createUsedListing(acData, market) {
         priceMultiplier,
         price,
         leasePrice,
+        location: locationIata,
         featured: false
     };
 }
@@ -267,7 +271,7 @@ export function purchaseUsedAircraft(listingId) {
         totalFlightHours: listing.hoursFlown,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: state.config.hubAirport,
+        currentLocation: listing.location,
         usedAge: listing.ageYears,
         condition: listing.condition
     };
@@ -302,7 +306,7 @@ export function leaseUsedAircraft(listingId) {
         totalFlightHours: listing.hoursFlown,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: state.config.hubAirport,
+        currentLocation: listing.location,
         usedAge: listing.ageYears,
         condition: listing.condition
     };

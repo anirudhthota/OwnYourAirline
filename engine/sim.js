@@ -116,7 +116,21 @@ function processFlightDepartures() {
             const currentMinutes = currentHour * 60 + currentMinute;
 
             if (currentMinutes >= depMinutes && currentMinutes < depMinutes + TICK_MINUTES) {
-                if (aircraft.status !== 'available') continue;
+                if (aircraft.status !== 'available') {
+                    const alreadyDelayed = state.delayedFlights.find(d => d.scheduleId === schedule.id && d.depTime === depTime);
+                    if (!alreadyDelayed) {
+                        addLogEntry(`Flight delayed: ${aircraft.registration} is not available for ${route.origin}\u2192${route.destination}`, 'warning');
+                        state.delayedFlights.push({
+                            scheduleId: schedule.id,
+                            routeId: route.id,
+                            aircraftId: aircraft.id,
+                            depTime,
+                            delayMinutes: 0,
+                            reason: `Aircraft ${aircraft.registration} not available (${aircraft.status})`
+                        });
+                    }
+                    continue;
+                }
 
                 // Check aircraft is at departure airport
                 if (aircraft.currentLocation && aircraft.currentLocation !== route.origin) {
@@ -124,20 +138,29 @@ function processFlightDepartures() {
                     continue;
                 }
 
+                let slotAcquired = false;
                 const isHub = route.origin === state.config.hubAirport;
                 const slotLevel = getSlotControlLevel(route.origin);
-                if (!isHub && slotLevel >= 3 && !checkAndUseSlot(route.origin, currentHour)) {
-                    addLogEntry(`Slot unavailable at ${route.origin} (Level ${slotLevel}) for ${String(currentHour).padStart(2, '0')}:00 — flight delayed`, 'warning');
-                    state.delayedFlights.push({
-                        scheduleId: schedule.id,
-                        routeId: route.id,
-                        aircraftId: aircraft.id,
-                        depTime,
-                        delayMinutes: 0,
-                        reason: `Slot unavailable at ${route.origin}`
-                    });
-                    continue;
+
+                if (!isHub && slotLevel >= 3) {
+                    slotAcquired = checkAndUseSlot(route.origin, currentHour);
+                    if (!slotAcquired) {
+                        const alreadyDelayed = state.delayedFlights.find(d => d.scheduleId === schedule.id && d.depTime === depTime);
+                        if (!alreadyDelayed) {
+                            addLogEntry(`Slot unavailable at ${route.origin} (Level ${slotLevel}) for ${String(currentHour).padStart(2, '0')}:00 — flight delayed`, 'warning');
+                            state.delayedFlights.push({
+                                scheduleId: schedule.id,
+                                routeId: route.id,
+                                aircraftId: aircraft.id,
+                                depTime,
+                                delayMinutes: 0,
+                                reason: `Slot unavailable at ${route.origin}`
+                            });
+                        }
+                        continue;
+                    }
                 } else {
+                    // Not highly restricted, consume slot for tracking if we can
                     checkAndUseSlot(route.origin, currentHour);
                 }
 
@@ -303,8 +326,8 @@ function processDayEnd(prevTotalMinutes) {
     // Calculate best/worst performing route today
     const routeProfits = {};
     for (const flight of state.flights.completed) {
-        // Only count flights from today (departed during the day that just ended)
-        const flightDay = Math.floor(flight.departureTime / MINUTES_PER_DAY);
+        // Only count flights that arrived during the day that just ended
+        const flightDay = Math.floor(flight.arrivalTime / MINUTES_PER_DAY);
         const prevDay = Math.floor(prevTotalMinutes / MINUTES_PER_DAY);
         if (flightDay !== prevDay) continue;
         const key = `${flight.origin}→${flight.destination}`;
