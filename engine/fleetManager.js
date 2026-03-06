@@ -249,7 +249,7 @@ export function checkUsedMarketRefresh() {
     }
 }
 
-export function purchaseUsedAircraft(listingId) {
+export function purchaseUsedAircraft(listingId, ferryToHub = false) {
     const state = getState();
     const market = state.usedMarket;
     const listing = market.listings.find(l => l.id === listingId);
@@ -258,8 +258,25 @@ export function purchaseUsedAircraft(listingId) {
         return null;
     }
 
+    let ferryCost = 0;
+    let distance = 0;
+    if (ferryToHub && listing.location !== state.config.hubAirport) {
+        distance = getDistanceBetweenAirports(listing.location, state.config.hubAirport);
+        ferryCost = Math.round(distance * 2.5);
+    }
+
+    const totalCost = listing.price + ferryCost;
+    if (state.finances.cash < totalCost) {
+        addLogEntry(`Not enough cash for purchase and ferry ($${formatMoney(totalCost)})`, 'error');
+        return null;
+    }
+
     if (!deductCash(listing.price, `Purchase used ${listing.type} (${listing.ageYears}yr, ${listing.condition})`)) {
         return null;
+    }
+
+    if (ferryCost > 0) {
+        deductCash(ferryCost, `Ferry flight: ${listing.location} \u2192 ${state.config.hubAirport} (${Math.round(distance)}km)`);
     }
 
     const aircraft = {
@@ -271,7 +288,7 @@ export function purchaseUsedAircraft(listingId) {
         totalFlightHours: listing.hoursFlown,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: listing.location,
+        currentLocation: ferryToHub ? state.config.hubAirport : listing.location,
         usedAge: listing.ageYears,
         condition: listing.condition
     };
@@ -282,7 +299,7 @@ export function purchaseUsedAircraft(listingId) {
     return aircraft;
 }
 
-export function leaseUsedAircraft(listingId) {
+export function leaseUsedAircraft(listingId, ferryToHub = false) {
     const state = getState();
     const market = state.usedMarket;
     const listing = market.listings.find(l => l.id === listingId);
@@ -292,8 +309,25 @@ export function leaseUsedAircraft(listingId) {
     }
 
     const deposit = listing.leasePrice * LEASE_DEPOSIT_MONTHS;
+    let ferryCost = 0;
+    let distance = 0;
+    if (ferryToHub && listing.location !== state.config.hubAirport) {
+        distance = getDistanceBetweenAirports(listing.location, state.config.hubAirport);
+        ferryCost = Math.round(distance * 2.5);
+    }
+
+    const totalCost = deposit + ferryCost;
+    if (state.finances.cash < totalCost) {
+        addLogEntry(`Not enough cash for lease deposit and ferry ($${formatMoney(totalCost)})`, 'error');
+        return null;
+    }
+
     if (!deductCash(deposit, `Lease deposit for used ${listing.type} (${LEASE_DEPOSIT_MONTHS} months)`)) {
         return null;
+    }
+
+    if (ferryCost > 0) {
+        deductCash(ferryCost, `Ferry flight: ${listing.location} \u2192 ${state.config.hubAirport} (${Math.round(distance)}km)`);
     }
 
     const aircraft = {
@@ -306,7 +340,7 @@ export function leaseUsedAircraft(listingId) {
         totalFlightHours: listing.hoursFlown,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: listing.location,
+        currentLocation: ferryToHub ? state.config.hubAirport : listing.location,
         usedAge: listing.ageYears,
         condition: listing.condition
     };

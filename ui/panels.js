@@ -402,20 +402,47 @@ function renderUsedMarket() {
             const id = parseInt(btn.dataset.buyUsed);
             const listing = market.listings.find(l => l.id === id);
             if (!listing) return;
-            showConfirm(
-                'Purchase Used Aircraft',
-                `<strong>${listing.type}</strong> (${listing.category})<br>` +
-                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
-                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
-                `Price: <strong>$${formatMoney(listing.price)}</strong> (${Math.round(listing.priceMultiplier * 100)}% of new)`,
-                () => {
-                    if (purchaseUsedAircraft(id)) {
-                        renderUsedMarket();
-                        renderFleetList();
-                        updateHUD();
-                    }
+            
+            const state = getState();
+            const processPurchase = (ferry) => {
+                if (purchaseUsedAircraft(id, ferry)) {
+                    renderUsedMarket();
+                    renderFleetList();
+                    updateHUD();
                 }
-            );
+            };
+
+            const baseMsg = `<strong>${listing.type}</strong> (${listing.category})<br>` +
+                            `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                            `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                            `Price: <strong>$${formatMoney(listing.price)}</strong> (${Math.round(listing.priceMultiplier * 100)}% of new)<br>` +
+                            `Location: <strong>${listing.location}</strong>`;
+
+            if (listing.location === state.config.hubAirport) {
+                showConfirm('Purchase Used Aircraft', baseMsg, () => processPurchase(false));
+                return;
+            }
+
+            const distance = getDistanceBetweenAirports(listing.location, state.config.hubAirport);
+            const ferryCost = Math.round(distance * 2.5);
+
+            const modalBody = showModal('Purchase Used Aircraft', `
+                <p>${baseMsg}</p>
+                <div style="margin: 15px 0; padding: 10px; background: rgba(255,165,0,0.1); border-left: 3px solid var(--accent-yellow); border-radius: 4px;">
+                    <strong>Location Requirement</strong><br>
+                    This aircraft is located at <strong>${listing.location}</strong>. Your hub is <strong>${state.config.hubAirport}</strong> (${Math.round(distance)}km away).<br>
+                    You can either keep it there and create a route from ${listing.location}, or ferry it back to your hub instantly for <strong>$${formatMoney(ferryCost)}</strong>.
+                </div>
+                <div class="modal-actions" style="flex-direction: column; gap: 8px;">
+                    <button class="btn-accent modal-ferry-btn" style="width: 100%">Buy & Ferry to Hub (+$${formatMoney(ferryCost)})</button>
+                    <button class="btn-secondary modal-keep-btn" style="width: 100%">Buy & Keep at ${listing.location}</button>
+                    <button class="btn-secondary modal-cancel-btn" style="width: 100%; border-color: transparent;">Cancel</button>
+                </div>
+            `);
+            
+            modalBody.querySelector('.modal-ferry-btn').addEventListener('click', () => { closeModal(); processPurchase(true); });
+            modalBody.querySelector('.modal-keep-btn').addEventListener('click', () => { closeModal(); processPurchase(false); });
+            modalBody.querySelector('.modal-cancel-btn').addEventListener('click', () => closeModal());
         });
     });
 
@@ -424,22 +451,49 @@ function renderUsedMarket() {
             const id = parseInt(btn.dataset.leaseUsed);
             const listing = market.listings.find(l => l.id === id);
             if (!listing) return;
+            
+            const state = getState();
             const deposit = listing.leasePrice * LEASE_DEPOSIT_MONTHS;
-            showConfirm(
-                'Lease Used Aircraft',
-                `<strong>${listing.type}</strong> (${listing.category})<br>` +
-                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
-                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
-                `Lease: <strong>$${formatMoney(listing.leasePrice)}/month</strong><br>` +
-                `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong>`,
-                () => {
-                    if (leaseUsedAircraft(id)) {
-                        renderUsedMarket();
-                        renderFleetList();
-                        updateHUD();
-                    }
+            const processLease = (ferry) => {
+                if (leaseUsedAircraft(id, ferry)) {
+                    renderUsedMarket();
+                    renderFleetList();
+                    updateHUD();
                 }
-            );
+            };
+
+            const baseMsg = `<strong>${listing.type}</strong> (${listing.category})<br>` +
+                            `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                            `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                            `Lease: <strong>$${formatMoney(listing.leasePrice)}/month</strong><br>` +
+                            `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong><br>` +
+                            `Location: <strong>${listing.location}</strong>`;
+
+            if (listing.location === state.config.hubAirport) {
+                showConfirm('Lease Used Aircraft', baseMsg, () => processLease(false));
+                return;
+            }
+
+            const distance = getDistanceBetweenAirports(listing.location, state.config.hubAirport);
+            const ferryCost = Math.round(distance * 2.5);
+
+            const modalBody = showModal('Lease Used Aircraft', `
+                <p>${baseMsg}</p>
+                <div style="margin: 15px 0; padding: 10px; background: rgba(255,165,0,0.1); border-left: 3px solid var(--accent-yellow); border-radius: 4px;">
+                    <strong>Location Requirement</strong><br>
+                    This aircraft is located at <strong>${listing.location}</strong>. Your hub is <strong>${state.config.hubAirport}</strong> (${Math.round(distance)}km away).<br>
+                    You can either keep it there and create a route from ${listing.location}, or ferry it back to your hub instantly for <strong>$${formatMoney(ferryCost)}</strong>.
+                </div>
+                <div class="modal-actions" style="flex-direction: column; gap: 8px;">
+                    <button class="btn-accent modal-ferry-btn" style="width: 100%">Lease & Ferry to Hub (+$${formatMoney(ferryCost)})</button>
+                    <button class="btn-secondary modal-keep-btn" style="width: 100%">Lease & Keep at ${listing.location}</button>
+                    <button class="btn-secondary modal-cancel-btn" style="width: 100%; border-color: transparent;">Cancel</button>
+                </div>
+            `);
+            
+            modalBody.querySelector('.modal-ferry-btn').addEventListener('click', () => { closeModal(); processLease(true); });
+            modalBody.querySelector('.modal-keep-btn').addEventListener('click', () => { closeModal(); processLease(false); });
+            modalBody.querySelector('.modal-cancel-btn').addEventListener('click', () => closeModal());
         });
     });
 }

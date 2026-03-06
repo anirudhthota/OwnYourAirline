@@ -100,6 +100,19 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - Real-time event log with auto-update
 - Paired route UI with grouping
 
+### Session E (Engine Integrity & Features)
+
+- **Task 1: Simulation Engine Integrity Fixes** — Fixed multiple critical simulation bugs: added explicitly delayed flights on aircraft unavailability to prevent silent cascades, fixed midnight wrap-around mathematical scheduling conflicts in \`scheduler.js\`, and fixed overnight P&L inaccuracies by syncing daily metric boundaries to flight \`arrivalTime\`. Fixed slot engine overconsumption during delays.
+- **Task 2: Fleet Swap Expansion** — \`swapAircraftOnRoute\` in \`scheduler.js\` now completely analyzes an aircraft's entire daily multi-leg flight plan before confirming a swap, preventing range failures, stranded planes, or turnaround bottlenecks on inherited schedules.
+- **Task 3: Used Aircraft Ferry System** — Used aircraft now spawn at random global airports globally. Purchasing or leasing them prompts a choice: "Ferry to Hub" or "Keep at Location". Ferrying instantly transports the plane to the hub but deducts a transparent distance-based cost ($2.50 per km) with no immediate slot or schedule requirements.
+
+### Session E (Engine Integrity & Planning Completion)
+
+- **Task 1: Simulation Engine Integrity Fixes** — Fixed multiple critical simulation bugs: added explicitly delayed flights on aircraft unavailability to prevent silent cascades, fixed midnight wrap-around mathematical scheduling conflicts in \`scheduler.js\`, and fixed overnight P&L inaccuracies by syncing daily metric boundaries to flight \`arrivalTime\`. Fixed slot engine overconsumption during delays.
+- **Task 2: Fleet Swap Expansion** — \`swapAircraftOnRoute\` in \`scheduler.js\` now completely analyzes an aircraft's entire daily multi-leg flight plan before confirming a swap, preventing range failures, stranded planes, or turnaround bottlenecks on inherited schedules.
+- **Task 3: Used Aircraft Ferry System** — Used aircraft now spawn at random global airports globally. Purchasing or leasing them prompts a choice: "Ferry to Hub" or "Keep at Location". Ferrying instantly transports the plane to the hub but deducts a transparent distance-based cost ($2.50 per km) with no immediate slot or schedule requirements.
+- **Task 4: Roadmap Planning & Phase 2 Stabilization** — Formal roadmap for Phases 3, 4, and 5 drafted, organizing Mechanics vs Scale and identifying critical engine dependencies. **Phase 2 is now officially fully stabilized.**
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs

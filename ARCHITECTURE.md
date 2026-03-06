@@ -51,6 +51,8 @@ engine/ files              ui/ files
 
 **Exception:** `state.ui` (selected panel, map center/zoom) is mutated by UI code since it's UI-only state.
 
+**Ferry to Hub System Data Flow:** When purchasing/leasing used aircraft located at foreign airports, the UI (`ui/panels.js`) prompts a modal and passes a `ferryToHub` boolean to `engine/fleetManager.js`. The engine atomically deducts the aircraft price and the distance-based ferry costs simultaneously, then initializes `currentLocation` to the hub. If the user declines the ferry, the aircraft `currentLocation` is explicitly initialized and stays at the foreign airport.
+
 ## Key Data Structures
 
 ### gameState (the root object)
@@ -97,7 +99,7 @@ engine/ files              ui/ files
         nextFlightId: 1
     },
     slots: {},                      // { "IATA_hour": count }
-    delayedFlights: [],             // flights waiting for slots
+    delayedFlights: [],             // flights waiting for slots or aircraft availability (prevents silent cascades)
     usedMarket: {
         listings: [],               // used aircraft for sale
         lastRefreshDay: 0,
@@ -161,6 +163,8 @@ engine/ files              ui/ files
 ```
 
 ### Schedule Object
+
+*(Note: Scheduler validation strictly checks full daily flight plans projecting ahead multiple legs across an aircraft's inherited schedule. It prevents wrap-around midnight schedule overlaps, strict turnaround limits, and global capacity limits.)*
 
 ```javascript
 {

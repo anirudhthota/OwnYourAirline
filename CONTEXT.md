@@ -45,6 +45,8 @@ These decisions have been made and must not be changed:
 - **Daily P&L notification is non-blocking.** It auto-dismisses, does not pause the game.
 - **AI routes are visual-only (Phase 1-2).** AI airlines have routes on the map but don't compete for slots or meaningfully affect demand yet.
 - **Canvas-only charts.** No external charting libraries. All graphs drawn directly on `<canvas>`.
+- **Aircraft Physical Location & Ferrying:** Aircraft strictly track their physical location (hub, foreign airports, or airborne). Players must ferry used aircraft to the hub paying distance-based costs if they intend to mobilize them from the hub.
+- **Engine Simulation Strictness:** The engine mathematically and strictly enforces slot capacity, prevents schedule wrap-around interval overlaps, mandates strict turnaround limits, and prevents silent cascading cancellations via an active `delayedFlights` queue.
 - **One airline per game.** No multi-airline or subsidiary model.
 
 ## What This Game Is NOT
