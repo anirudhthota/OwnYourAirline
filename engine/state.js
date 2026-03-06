@@ -158,13 +158,13 @@ export function addLogEntry(message, type = 'info') {
     window.dispatchEvent(new CustomEvent('gameEvent', { detail: entry }));
 }
 
-export function deductCash(amount, description) {
+export function deductCash(amount, description, force = false) {
     if (!gameState) return false;
     if (gameState.finances.godMode) {
         addLogEntry(`[GOD] ${description}: $${formatMoney(amount)} (not deducted)`, 'finance');
         return true;
     }
-    if (gameState.finances.cash < amount) {
+    if (!force && gameState.finances.cash < amount) {
         addLogEntry(`Insufficient funds for ${description}: need $${formatMoney(amount)}, have $${formatMoney(gameState.finances.cash)}`, 'warning');
         return false;
     }

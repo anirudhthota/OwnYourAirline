@@ -1,7 +1,7 @@
 import { getState, formatMoney, formatGameTimestamp } from '../engine/state.js';
 import { AIRCRAFT_TYPES, getAircraftByType, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
 import { AIRPORTS, getAirportByIata, getDistanceBetweenAirports, getSlotControlLevel, SLOT_CONTROL_LEVELS, getSlotCost } from '../data/airports.js';
-import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft } from '../engine/fleetManager.js';
+import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, OWNERSHIP_TYPE, getFleetSummary, getAircraftNextFree, purchaseUsedAircraft, leaseUsedAircraft, startMaintenance } from '../engine/fleetManager.js';
 import { getGameTime, MINUTES_PER_DAY, MINUTES_PER_HOUR } from '../engine/state.js';
 import { createRoute, deleteRoute, calculateBlockTime, calculateBaseFare, calculateFlightCost, canAircraftFlyRoute, getRouteById, getTotalDailySeatsOnRoute, calculateLoadFactor } from '../engine/routeEngine.js';
 import { createSchedule, deleteSchedule, SCHEDULE_MODE, createBank, deleteBank, getSchedulesByRoute, getSchedulesByAircraft, calculateMinAircraft, validateScheduleParams, updateSchedule, swapAircraftOnRoute, getProjectedLocation, generateFlightNumbers, getAllUsedFlightNumbers } from '../engine/scheduler.js';
@@ -180,7 +180,11 @@ function renderFleetList() {
                     <span class="fleet-reg" data-reg-display="${ac.id}">${ac.registration}</span>
                     <button class="fleet-rename-btn" data-rename="${ac.id}" title="Rename tail number">\u270E</button>
                     <span class="fleet-type">${ac.type}</span>
-                    <span class="fleet-status status-${ac.status}">${ac.status === 'in_flight' ? 'BUSY' : ac.status.toUpperCase()}</span>
+                    <span class="fleet-status status-${ac.status}">${
+                        ac.status === 'in_flight' ? 'BUSY' :
+                        ac.status === 'maintenance_due' ? 'AVAILABLE' :
+                        ac.status.toUpperCase()
+                    }</span>
                     <span class="fleet-location">${formatLocation(ac)}</span>
                 </div>
                 <div class="fleet-card-details">
@@ -190,7 +194,17 @@ function renderFleetList() {
                     <span>${Math.round(ac.totalFlightHours)} flight hrs</span>
                     <span>${schedules.length} schedule(s)</span>
                 </div>
+                ${ac.status === 'maintenance_due' ? 
+                    `<div class="fleet-maintenance-warning" style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">
+                        ${ac.pendingCheckType || 'Unknown'}-Check Due \u2013 ${Math.ceil(ac.graceHoursRemaining || 0)}h Grace Remaining
+                    </div>` : ''}
+                ${ac.status === 'maintenance' ? 
+                    `<div class="fleet-maintenance-critical" style="color: #f44336; font-weight: bold; margin-bottom: 8px;">
+                        Under Maintenance${ac.maintenanceReleaseTime ? ' \u2013 ' + Math.ceil((ac.maintenanceReleaseTime - state.clock.totalMinutes) / 60) + 'h remaining' : ''}
+                    </div>` : ''}
                 <div class="fleet-card-actions">
+                    ${ac.status === 'maintenance_due' ? 
+                        `<button class="btn-sm btn-accent" data-start-maint="${ac.id}">Perform Maintenance</button>` : ''}
                     ${ac.ownership === 'OWNED'
                         ? `<button class="btn-sm btn-danger" data-sell="${ac.id}">Sell</button>`
                         : `<button class="btn-sm btn-danger" data-return="${ac.id}">Return Lease</button>`
@@ -245,6 +259,25 @@ function renderFleetList() {
                 `Sell <strong>${aircraft.type}</strong> (${aircraft.registration})?<br>You will receive the depreciated sale value.`,
                 () => {
                     if (sellAircraft(id)) {
+                        renderFleetList();
+                        updateHUD();
+                    }
+                }
+            );
+        });
+    });
+
+    listDiv.querySelectorAll('[data-start-maint]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.startMaint);
+            const aircraft = state.fleet.find(f => f.id === id);
+            if (!aircraft) return;
+            
+            showConfirm(
+                'Start Maintenance',
+                `Are you sure you want to perform the <strong>${aircraft.pendingCheckType}-Check</strong> for ${aircraft.registration}?<br>Active schedules will be unassigned.`,
+                () => {
+                    if (startMaintenance(id)) {
                         renderFleetList();
                         updateHUD();
                     }
@@ -2009,10 +2042,22 @@ function renderScheduleEditor(scheduleId) {
             <div class="form-row">
                 <label>Aircraft</label>
                 <select id="se-aircraft">
+                    <option value="" ${!schedule.aircraftId ? 'selected' : ''}>-- Unassigned --</option>
                     ${state.fleet.map(ac => {
-                        const statusLabel = ac.status === 'available' ? '\u2705 Available'
-                            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
-                            : '\uD83D\uDFE1 Busy';
+                        let statusLabel = '';
+                        if (ac.status === 'maintenance') {
+                            if (ac.maintenanceReleaseTime) {
+                                const gt = getGameTime(ac.maintenanceReleaseTime);
+                                statusLabel = `\uD83D\uDD34 MAINTENANCE until Y${gt.year} M${gt.month} W${gt.week} D${gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+                            } else {
+                                statusLabel = '\uD83D\uDD34 MAINTENANCE';
+                            }
+                        } else if (ac.status === 'in_flight') {
+                            statusLabel = '\uD83D\uDFE1 Busy';
+                        } else {
+                            statusLabel = '\u2705 Available';
+                        }
+                        
                         let nextFreeLabel = '';
                         if (ac.status === 'in_flight') {
                             const nextFree = getAircraftNextFree(ac.id);

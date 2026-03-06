@@ -224,8 +224,8 @@ export const AIRPORT_FEE_PER_ARRIVAL = 2000;
 export const DEPRECIATION_RATE_ANNUAL = 0.05;
 export const LEASE_DEPOSIT_MONTHS = 3;
 
-export const MAINTENANCE_THRESHOLDS = {
-    A_CHECK_HOURS: 500,
-    B_CHECK_HOURS: 3000,
-    C_CHECK_HOURS: 10000
+export const MAINTENANCE_RULES = {
+    A: { threshold: 500, cost: 25000, durationMinutes: 12 * 60 },
+    B: { threshold: 3000, cost: 150000, durationMinutes: 3 * 24 * 60 },
+    C: { threshold: 10000, cost: 750000, durationMinutes: 14 * 24 * 60 }
 };

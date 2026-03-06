@@ -1,5 +1,5 @@
 import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR, MINUTES_PER_DAY } from './state.js';
-import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS, MAINTENANCE_THRESHOLDS } from '../data/aircraft.js';
+import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS, MAINTENANCE_RULES } from '../data/aircraft.js';
 import { AIRPORTS } from '../data/airports.js';
 import { getSchedulesByAircraft } from './scheduler.js';
 
@@ -306,9 +306,9 @@ export function purchaseUsedAircraft(listingId, ferryToHub = false) {
         usedAge: listing.ageYears,
         condition: listing.condition,
         // Maintenance
-        hoursSinceACheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.A_CHECK_HOURS,
-        hoursSinceBCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.B_CHECK_HOURS,
-        hoursSinceCCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.C_CHECK_HOURS,
+        hoursSinceACheck: listing.hoursFlown % MAINTENANCE_RULES.A.threshold,
+        hoursSinceBCheck: listing.hoursFlown % MAINTENANCE_RULES.B.threshold,
+        hoursSinceCCheck: listing.hoursFlown % MAINTENANCE_RULES.C.threshold,
         pendingCheckType: null,
         graceHoursRemaining: 0,
         maintenanceReleaseTime: null
@@ -365,9 +365,9 @@ export function leaseUsedAircraft(listingId, ferryToHub = false) {
         usedAge: listing.ageYears,
         condition: listing.condition,
         // Maintenance
-        hoursSinceACheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.A_CHECK_HOURS,
-        hoursSinceBCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.B_CHECK_HOURS,
-        hoursSinceCCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.C_CHECK_HOURS,
+        hoursSinceACheck: listing.hoursFlown % MAINTENANCE_RULES.A.threshold,
+        hoursSinceBCheck: listing.hoursFlown % MAINTENANCE_RULES.B.threshold,
+        hoursSinceCCheck: listing.hoursFlown % MAINTENANCE_RULES.C.threshold,
         pendingCheckType: null,
         graceHoursRemaining: 0,
         maintenanceReleaseTime: null
@@ -406,4 +406,52 @@ export function addFreeAircraftToFleet(aircraftType) {
     state.fleet.push(aircraft);
     addLogEntry(`Starter aircraft added: ${acData.type} (${aircraft.registration})`, 'fleet');
     return aircraft;
+}
+
+export function startMaintenance(aircraftId) {
+    const state = getState();
+    const aircraft = state.fleet.find(a => a.id === aircraftId);
+    
+    if (!aircraft) return false;
+    if (aircraft.status !== 'maintenance_due' || !aircraft.pendingCheckType) {
+        addLogEntry(`Cannot start maintenance for aircraft ${aircraft.registration}.`, 'error');
+        return false;
+    }
+
+    const checkType = aircraft.pendingCheckType; // "A", "B", or "C"
+    const rule = MAINTENANCE_RULES[checkType];
+
+    if (!deductCash(rule.cost, `Manual ${checkType}-Check Maintenance (${aircraft.registration})`, true)) {
+        return false;
+    }
+
+    // Set Status and Release Time
+    aircraft.status = 'maintenance';
+    aircraft.maintenanceReleaseTime = state.clock.totalMinutes + rule.durationMinutes;
+
+    // Hierarchy Reset
+    if (checkType === 'C') {
+        aircraft.hoursSinceCCheck = 0;
+        aircraft.hoursSinceBCheck = 0;
+        aircraft.hoursSinceACheck = 0;
+    } else if (checkType === 'B') {
+        aircraft.hoursSinceBCheck = 0;
+        aircraft.hoursSinceACheck = 0;
+    } else {
+        aircraft.hoursSinceACheck = 0;
+    }
+
+    // Clear Trackers
+    aircraft.pendingCheckType = null;
+    aircraft.graceHoursRemaining = 0;
+
+    // Queue Protection (Unassign any future scheduled flights)
+    state.schedules.forEach(s => {
+        if (s.aircraftId === aircraft.id) {
+            s.aircraftId = null;
+        }
+    });
+
+    addLogEntry(`${aircraft.registration} entered ${checkType}-Check. Expected returning in ${Math.ceil(rule.durationMinutes / 60)}h.`, 'fleet');
+    return true;
 }

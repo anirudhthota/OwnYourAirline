@@ -1,5 +1,5 @@
 import { getState, addLogEntry, addCash, deductCash, TICK_MINUTES, GAME_SPEEDS, formatMoney, MINUTES_PER_DAY, MINUTES_PER_HOUR, MINUTES_PER_MONTH, getGameTime } from './state.js';
-import { getAircraftByType } from '../data/aircraft.js';
+import { getAircraftByType, MAINTENANCE_RULES } from '../data/aircraft.js';
 import { getAirportByIata, getSlotControlLevel } from '../data/airports.js';
 import { calculateLoadFactor, calculateFlightRevenue, calculateFlightCost, getRouteById, getTotalDailySeatsOnRoute } from './routeEngine.js';
 import { processMonthlyLeaseCosts, checkUsedMarketRefresh } from './fleetManager.js';
@@ -248,10 +248,63 @@ function processActiveFlights() {
 
         const aircraft = state.fleet.find(f => f.id === flight.aircraftId);
         if (aircraft) {
-            aircraft.status = 'available';
             aircraft.currentLocation = flight.destination;
             const flightHours = (flight.arrivalTime - flight.departureTime) / 60;
             aircraft.totalFlightHours += flightHours;
+
+            // Restore status from in_flight to evaluate maintenance
+            aircraft.status = aircraft.pendingCheckType ? 'maintenance_due' : 'available';
+
+            // Maintenance Math
+            aircraft.hoursSinceACheck += flightHours;
+            aircraft.hoursSinceBCheck += flightHours;
+            aircraft.hoursSinceCCheck += flightHours;
+
+            if (aircraft.status === 'maintenance_due') {
+                aircraft.graceHoursRemaining -= flightHours;
+                
+                if (aircraft.graceHoursRemaining <= 0) {
+                    aircraft.status = 'maintenance';
+                    const rule = MAINTENANCE_RULES[aircraft.pendingCheckType];
+                    // Unassign schedules before release time
+                    aircraft.maintenanceReleaseTime = state.clock.totalMinutes + rule.durationMinutes;
+                    
+                    // Reset Counters
+                    const checkType = aircraft.pendingCheckType;
+                    if (checkType === 'C') {
+                        aircraft.hoursSinceCCheck = 0;
+                        aircraft.hoursSinceBCheck = 0;
+                        aircraft.hoursSinceACheck = 0;
+                    } else if (checkType === 'B') {
+                        aircraft.hoursSinceBCheck = 0;
+                        aircraft.hoursSinceACheck = 0;
+                    } else {
+                        aircraft.hoursSinceACheck = 0;
+                    }
+                    aircraft.pendingCheckType = null;
+                    aircraft.graceHoursRemaining = 0;
+
+                    deductCash(rule.cost, `Forced ${checkType}-Check Maintenance (${aircraft.registration})`, true);
+                    
+                    // Maintenance Queue Protection
+                    state.schedules.forEach(s => {
+                        if (s.aircraftId === aircraft.id) s.aircraftId = null;
+                    });
+                    addLogEntry(`Grace period expired. ${aircraft.registration} forcefully grounded for maintenance.`, 'warning');
+                }
+            } else if (aircraft.status === 'available') {
+                let dueCheck = null;
+                if (aircraft.hoursSinceCCheck >= MAINTENANCE_RULES.C.threshold) dueCheck = 'C';
+                else if (aircraft.hoursSinceBCheck >= MAINTENANCE_RULES.B.threshold) dueCheck = 'B';
+                else if (aircraft.hoursSinceACheck >= MAINTENANCE_RULES.A.threshold) dueCheck = 'A';
+                
+                if (dueCheck) {
+                    aircraft.status = 'maintenance_due';
+                    aircraft.pendingCheckType = dueCheck;
+                    aircraft.graceHoursRemaining = 50;
+                    addLogEntry(`Maintenance due for ${aircraft.registration} (${dueCheck}-Check). 50 hours grace period.`, 'warning');
+                }
+            }
 
             // Delay cascade: if this flight was delayed, propagate delay to next rotation
             if (flight.delayMinutes > 0) {

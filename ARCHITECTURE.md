@@ -140,6 +140,16 @@ engine/ files              ui/ files
 }
 ```
 
+### `MAINTENANCE_RULES` constants
+Exported from `data/aircraft.js`:
+```javascript
+{
+    A: { threshold: 500, cost: 25000, durationMinutes: 720 },
+    B: { threshold: 3000, cost: 150000, durationMinutes: 4320 },
+    C: { threshold: 10000, cost: 750000, durationMinutes: 20160 }
+}
+```
+
 ### Aircraft Object (fleet item)
 
 ```javascript

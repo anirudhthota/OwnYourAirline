@@ -194,6 +194,8 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
         errors.push(`${acData.type} cannot fly ${route.origin}-${route.destination}: range ${acData.rangeKm}km < distance ${route.distance}km`);
     }
 
+    // Maintenance validation will be checked after times are resolved
+
     // Location check — use forward projection for each proposed departure time
     // Defer detailed per-time location checks until after times are resolved (below)
 
@@ -212,6 +214,25 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
             if (!bank) {
                 errors.push('Connection bank not found');
             }
+        }
+    }
+
+    // Maintenance validation — project if any departure time falls before maintenance release
+    if (times.length > 0 && aircraft.status === 'maintenance' && aircraft.maintenanceReleaseTime) {
+        const nowMin = state.clock.totalMinutes;
+        let earliestAbsoluteDep = Infinity;
+        for (const t of times) {
+            let nextDep = Math.floor(nowMin / 1440) * 1440 + (t.hour * 60 + t.minute);
+            if (nextDep <= nowMin) {
+                nextDep += 1440; // Next occurrence is tomorrow
+            }
+            if (nextDep < earliestAbsoluteDep) earliestAbsoluteDep = nextDep;
+        }
+
+        if (earliestAbsoluteDep < aircraft.maintenanceReleaseTime) {
+            const gt = getGameTime(aircraft.maintenanceReleaseTime);
+            const hrs = Math.ceil((aircraft.maintenanceReleaseTime - nowMin) / 60);
+            errors.push(`${aircraft.registration} is in maintenance until Day ${gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')} (${hrs}h from now). Cannot fulfill departure before release.`);
         }
     }
 
@@ -266,16 +287,17 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
     if (aircraft && times.length > 0 && acData) {
         const existingScheds = state.schedules.filter(s => s.aircraftId === aircraftId && s.active && s.id !== excludeScheduleId);
         const blockTime = calculateBlockTime(route.distance, aircraft.type);
+        const turnaround = getTurnaroundTime(aircraft.type);
 
         for (const existing of existingScheds) {
             const existingRoute = getRouteById(existing.routeId);
             if (!existingRoute) continue;
             for (const newTime of times) {
                 const newDepMin = newTime.hour * 60 + newTime.minute;
-                const newReturnMin = newDepMin + blockTime;
+                const newReturnMin = newDepMin + blockTime + turnaround;
                 for (const exTime of existing.departureTimes) {
                     const exDepMin = exTime.hour * 60 + exTime.minute;
-                    const exReturnMin = exDepMin + existing.blockTimeMinutes;
+                    const exReturnMin = exDepMin + existing.blockTimeMinutes + turnaround;
                     
                     const intervalsA = [
                         { start: newDepMin, end: newReturnMin },
@@ -292,7 +314,7 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
                     }
                     if (overlap) {
                         errors.push(
-                            `Scheduling conflict: ${aircraft.registration} is already scheduled on ${existingRoute.origin}\u2192${existingRoute.destination} departing ${String(exTime.hour).padStart(2, '0')}:${String(exTime.minute).padStart(2, '0')} (returns ~${String(Math.floor(exReturnMin / 60) % 24).padStart(2, '0')}:${String(exReturnMin % 60).padStart(2, '0')}). Conflicts with proposed departure at ${String(newTime.hour).padStart(2, '0')}:${String(newTime.minute).padStart(2, '0')}.`
+                            `Scheduling conflict: ${aircraft.registration} is already scheduled on ${existingRoute.origin}\u2192${existingRoute.destination} departing ${String(exTime.hour).padStart(2, '0')}:${String(exTime.minute).padStart(2, '0')} (requires until ~${String(Math.floor(exReturnMin / 60) % 24).padStart(2, '0')}:${String(exReturnMin % 60).padStart(2, '0')} including turnaround). Conflicts with proposed departure at ${String(newTime.hour).padStart(2, '0')}:${String(newTime.minute).padStart(2, '0')}.`
                         );
                     }
                 }

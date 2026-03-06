@@ -111,6 +111,10 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 
 - **Task 1: Engine Data Expansion** — Implemented strict maintenance properties (`hoursSinceACheck`, `pendingCheckType`, `graceHoursRemaining`, etc.) across all new, leased, free, and used aircraft instantiations in `fleetManager.js`. Preserved save compatibility in `init.js` by aggressively patching uninitialized variables on older profiles.
 - **Task 1b: Data Architecture Cleanup** — Extracted hardcoded maintenance interval thresholds into a centralized `MAINTENANCE_THRESHOLDS` export in `data/aircraft.js` to guarantee consistency across engine modules.
+- **Task 2: Simulation Tick Math** — Updated `sim.js` to natively inject flight-duration decrements and A/B/C threshold triggers at the precise moment a flight officially completes its arrival block (`processActiveFlights`), natively enforcing forced-grounding and explicit schedule unassignment without double counting ticks.
+- **Task 3: UI Badging** — Overhauled `fleetManager` fleet card rendering inside `ui/panels.js` to explicitly expose `maintenance_due` grace hour warnings as amber badges, and red `maintenance` grounded states, displaying time-to-release when applicable. No engine logic explicitly touched.
+- **Task 4: Maintenance Action** — Centralized `MAINTENANCE_RULES` containing abstract durations and costs inside `data/aircraft.js`. Expanded `fleetManager.js` with `startMaintenance()` API that logically overrides `state.js` negative balance restrictions, strips matching entries from `schedules`, resets appropriate nested threshold tiers, and triggers via the `Perform Maintenance` UI module within `panels.js`.
+- **Task 5: Scheduler Collision (Final)** — Expanded validation schemas in `scheduler.js` to strictly enforce padding restrictions when analyzing overlap rules across entirely discrete routes. Blocked all assigning protocols if the aircraft's physical active grounding limit overlaps with requested flight departures, while dynamically surfacing exact abstract release chronologies in the schedule drop-down panels. Maintenance System V1 is structurally complete.
 
 ### Phase 3 Roadmap
 
