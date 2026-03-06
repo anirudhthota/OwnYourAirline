@@ -99,6 +99,10 @@ function renderDashboard(container) {
                 <div class="dash-card-value">${state.flights.completed.length}</div>
             </div>
             <div class="dash-card">
+                <div class="dash-card-label">Transfers Carried</div>
+                <div class="dash-card-value">${state.flights.completed.reduce((a, b) => a + (b.transferPassengers || 0), 0).toLocaleString()}</div>
+            </div>
+            <div class="dash-card">
                 <div class="dash-card-label">Total Revenue</div>
                 <div class="dash-card-value">$${formatMoney(state.finances.totalRevenue)}</div>
             </div>
@@ -1358,6 +1362,10 @@ function renderRouteList() {
         const totalSeats = getTotalDailySeatsOnRoute(route.id);
         const loadFactor = calculateLoadFactor(route, totalSeats);
 
+        // Daily Transfer Calculation (Last 24 Game Hours)
+        const recentFlights = state.flights.completed.filter(f => f.routeId === route.id && (state.clock.totalMinutes - f.arrivalTime) <= 1440);
+        const dayTransfers = recentFlights.reduce((sum, f) => sum + (f.transferPassengers || 0), 0);
+
         // Collect unique aircraft assigned to this route's schedules
         const assignedAcIds = [...new Set(schedules.map(s => s.aircraftId))];
         const assignedAircraft = assignedAcIds.map(id => state.fleet.find(f => f.id === id)).filter(Boolean);
@@ -1411,6 +1419,7 @@ function renderRouteList() {
                     <span>Schedules: ${schedules.length}</span>
                     <span>Daily seats: ${totalSeats}</span>
                     <span>Load factor: ${(loadFactor * 100).toFixed(0)}%</span>
+                    <span>24h Transfers: ${dayTransfers}</span>
                 </div>
                 ${assignedAircraft.length > 0 ? `
                     <div class="route-aircraft-list">

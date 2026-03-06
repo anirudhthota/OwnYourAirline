@@ -4,7 +4,8 @@ import { getState, hasSavedGame, GAME_SPEEDS, MINUTES_PER_DAY, MINUTES_PER_WEEK,
 import { setGameSpeed } from './engine/sim.js';
 import { createHUD, updateHUD } from './ui/hud.js';
 import { initMap, renderMap } from './ui/map.js';
-import { initSideNav, showPanel } from './ui/panels.js';
+import { AppShell } from './ui/app/AppShell.js';
+import { showPanel } from './ui/services/uiState.js';
 import { showDailyPnLNotification } from './ui/dailyPnl.js';
 
 function boot() {
@@ -43,21 +44,10 @@ function launchGame() {
     const state = getState();
     const app = document.getElementById('app');
 
-    app.innerHTML = `
-        <div id="hud" class="hud"></div>
-        <div id="game-body" class="game-body">
-            <nav id="side-nav" class="side-nav"></nav>
-            <div id="main-area" class="main-area">
-                <div id="map-container" class="map-container"></div>
-                <div id="panel-content" class="panel-content"></div>
-            </div>
-        </div>
-    `;
+    AppShell(app);
 
     document.documentElement.style.setProperty('--airline-color', state.config.airlineColor);
 
-    createHUD();
-    initSideNav();
     initMap();
     showPanel('dashboard');
 

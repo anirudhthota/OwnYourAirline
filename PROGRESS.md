@@ -120,6 +120,7 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
   - **Step 1:** Implemented core cache mapping loops inside `state.transfers` with strictly transient payloads via `localStorage` stripped handlers.
   - **Step 2:** Created `engine/transfers.js` containing the `recalculateTransferDemand` algorithm. Native daily engine hooks loop Hub-bound routes simultaneously, applying sequential timestamp verifications and mathematically restricting `competitor` direct-route cannibalization. Minimum Connection Times (MCT) and 1440-minute wraparound matrices strictly enforced prior to local boarding logic.
   - **Step 3:** Intercepted the simulation loop at the `launchFlight` function directly where local `loadFactor` math binds to available seating. Deducts physical seats mathematically across both Outbound and Inbound abstracted variables *simultaneously* via `Math.min`. Retains base Local-Passenger-First sequence requirements by boarding transfers strictly upon initial unbooked capacity blocks prior to calculating final load bounds.
+  - **Step 4:** Embedded `transferPassengers` dynamically aggregated matrices inside `ui/panels.js`. Modified the Dashboard Summary payload natively via array reduction across `.flights.completed` for all-time stats, and appended the `24h Transfers` label precisely onto standard `route-card` outputs utilizing 1440-minute lookback checks independently of engine execution.
 
 ### Phase 3 Roadmap
 

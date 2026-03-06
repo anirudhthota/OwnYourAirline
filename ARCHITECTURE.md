@@ -220,6 +220,7 @@ Exported from `data/aircraft.js`:
     arrivalTime: 1460,
     distance: 7842,
     passengers: 180,
+    transferPassengers: 25,         // Portion of total passengers connecting via hub
     loadFactor: 0.82,
     revenue: 104400,
     cost: 85000,
