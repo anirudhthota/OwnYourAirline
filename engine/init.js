@@ -41,6 +41,15 @@ export function initFromSave() {
             route.pairedRouteId = null;
         }
     }
+    // Ensure maintenance fields exist for older saves
+    for (const ac of state.fleet) {
+        if (ac.hoursSinceACheck === undefined) ac.hoursSinceACheck = 0;
+        if (ac.hoursSinceBCheck === undefined) ac.hoursSinceBCheck = 0;
+        if (ac.hoursSinceCCheck === undefined) ac.hoursSinceCCheck = 0;
+        if (ac.pendingCheckType === undefined) ac.pendingCheckType = null;
+        if (ac.graceHoursRemaining === undefined) ac.graceHoursRemaining = 0;
+        if (ac.maintenanceReleaseTime === undefined) ac.maintenanceReleaseTime = null;
+    }
     // Ensure flightNumbers exist for older saves
     for (const sched of state.schedules) {
         if (!sched.flightNumbers) {

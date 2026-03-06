@@ -1,5 +1,5 @@
 import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR, MINUTES_PER_DAY } from './state.js';
-import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS } from '../data/aircraft.js';
+import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS, MAINTENANCE_THRESHOLDS } from '../data/aircraft.js';
 import { AIRPORTS } from '../data/airports.js';
 import { getSchedulesByAircraft } from './scheduler.js';
 
@@ -29,7 +29,14 @@ export function purchaseAircraft(aircraftType) {
         totalFlightHours: 0,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: state.config.hubAirport
+        currentLocation: state.config.hubAirport,
+        // Maintenance
+        hoursSinceACheck: 0,
+        hoursSinceBCheck: 0,
+        hoursSinceCCheck: 0,
+        pendingCheckType: null,
+        graceHoursRemaining: 0,
+        maintenanceReleaseTime: null
     };
 
     state.fleet.push(aircraft);
@@ -60,7 +67,14 @@ export function leaseAircraft(aircraftType) {
         totalFlightHours: 0,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: state.config.hubAirport
+        currentLocation: state.config.hubAirport,
+        // Maintenance
+        hoursSinceACheck: 0,
+        hoursSinceBCheck: 0,
+        hoursSinceCCheck: 0,
+        pendingCheckType: null,
+        graceHoursRemaining: 0,
+        maintenanceReleaseTime: null
     };
 
     state.fleet.push(aircraft);
@@ -290,7 +304,14 @@ export function purchaseUsedAircraft(listingId, ferryToHub = false) {
         registration: generateRegistration(state),
         currentLocation: ferryToHub ? state.config.hubAirport : listing.location,
         usedAge: listing.ageYears,
-        condition: listing.condition
+        condition: listing.condition,
+        // Maintenance
+        hoursSinceACheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.A_CHECK_HOURS,
+        hoursSinceBCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.B_CHECK_HOURS,
+        hoursSinceCCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.C_CHECK_HOURS,
+        pendingCheckType: null,
+        graceHoursRemaining: 0,
+        maintenanceReleaseTime: null
     };
 
     state.fleet.push(aircraft);
@@ -342,7 +363,14 @@ export function leaseUsedAircraft(listingId, ferryToHub = false) {
         registration: generateRegistration(state),
         currentLocation: ferryToHub ? state.config.hubAirport : listing.location,
         usedAge: listing.ageYears,
-        condition: listing.condition
+        condition: listing.condition,
+        // Maintenance
+        hoursSinceACheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.A_CHECK_HOURS,
+        hoursSinceBCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.B_CHECK_HOURS,
+        hoursSinceCCheck: listing.hoursFlown % MAINTENANCE_THRESHOLDS.C_CHECK_HOURS,
+        pendingCheckType: null,
+        graceHoursRemaining: 0,
+        maintenanceReleaseTime: null
     };
 
     state.fleet.push(aircraft);
@@ -365,7 +393,14 @@ export function addFreeAircraftToFleet(aircraftType) {
         totalFlightHours: 0,
         status: 'available',
         registration: generateRegistration(state),
-        currentLocation: state.config.hubAirport
+        currentLocation: state.config.hubAirport,
+        // Maintenance
+        hoursSinceACheck: 0,
+        hoursSinceBCheck: 0,
+        hoursSinceCCheck: 0,
+        pendingCheckType: null,
+        graceHoursRemaining: 0,
+        maintenanceReleaseTime: null
     };
 
     state.fleet.push(aircraft);

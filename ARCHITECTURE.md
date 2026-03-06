@@ -13,7 +13,7 @@ OwnYourAirline/
 ├── README.md               — Basic readme
 │
 ├── data/                   — Static data (no state mutation)
-│   ├── aircraft.js         — 14 aircraft types with specs, cost constants, turnaround times
+│   ├── aircraft.js         — 14 aircraft types with specs, cost constants, turnaround times, maintenance thresholds
 │   ├── airlines.js         — 150+ real AI airlines with hubs, alliances, fleet preferences
 │   └── airports.js         — 300+ real airports with coords/slots, slot control levels, distance calc
 │
@@ -158,7 +158,14 @@ engine/ files              ui/ files
     depositPaid: 2550000,
     // Used market purchases:
     usedAge: 5,                     // years (if bought used)
-    condition: "Good"               // Good | Fair (if bought used)
+    condition: "Good",              // Good | Fair (if bought used)
+    // Maintenance V1 tracking:
+    hoursSinceACheck: 495,
+    hoursSinceBCheck: 495,
+    hoursSinceCCheck: 495,
+    pendingCheckType: null,         // "A" | "B" | "C" (null if not due)
+    graceHoursRemaining: 0,
+    maintenanceReleaseTime: null
 }
 ```
 
