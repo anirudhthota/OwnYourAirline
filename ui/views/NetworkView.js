@@ -39,12 +39,12 @@ function renderNetworkContent() {
             ${StatCard('Profitable', '0')}
             ${StatCard('Loss Making', '0')}
             ${StatCard('Avg Load Factor', '0%')}
-            ${StatCard('Total Spill', '0')}
+            ${StatCard('Est. Spill', '0')}
         `;
         tableContainer.innerHTML = DataTable(
             ['Route', 'Distance', 'Aircraft', 'Flights', 'Pax', 'Load', 'Revenue', 'Costs', 'Profit', 'Spill', 'Transfers', 'Status'],
             '',
-            '<div class="empty-state" style="padding: 40px; text-align: center;">No active routes in network. Create your first route!</div>'
+            '<div class="empty-state" style="padding: 40px; text-align: center; color: var(--text-muted);">No completed flights in the last 24 hours.<br>Analytics will populate once flights arrive.</div>'
         );
         return;
     }
@@ -158,11 +158,14 @@ function renderNetworkContent() {
     const netLoadFactor = totalCapacitySum > 0 ? (totalPaxSum / totalCapacitySum * 100) : 0;
 
     kpiGrid.innerHTML = `
-        ${StatCard('Total Routes', state.routes.length)}
-        ${StatCard('Profitable', totalProfitable)}
-        ${StatCard('Loss Making', totalLossMaking)}
-        ${StatCard('Avg Load Factor', netLoadFactor.toFixed(1) + '%')}
-        ${StatCard('Total Spill', networkSpill.toLocaleString() + ' pax')}
+        <div style="display:grid; grid-template-columns: repeat(6, 1fr) !important; gap: 16px; width: 100%;">
+            ${StatCard('Total Routes', state.routes.length)}
+            ${StatCard('Profitable', totalProfitable)}
+            ${StatCard('Loss Making', totalLossMaking)}
+            ${StatCard('Avg Load Factor', netLoadFactor.toFixed(1) + '%')}
+            ${StatCard('Total Revenue (24h)', '$' + formatMoney(routeMetrics.reduce((sum, r) => sum + r.rev, 0)))}
+            ${StatCard('Est. Spill', networkSpill.toLocaleString() + ' pax')}
+        </div>
     `;
 
     // SORTING
@@ -179,7 +182,10 @@ function renderNetworkContent() {
     });
 
     const rowsHtml = routeMetrics.map(r => {
-        const profitColor = r.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+        let profitColor = 'inherit';
+        if (r.profit > 0) profitColor = 'var(--color-success)';
+        else if (r.profit < 0) profitColor = 'var(--color-danger)';
+
         return `
             <tr class="route-analytics-row" data-route-id="${r.id}" style="cursor: pointer;">
                 <td><strong>${r.origin} \u2192 ${r.dest}</strong></td>

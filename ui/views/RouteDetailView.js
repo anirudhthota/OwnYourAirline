@@ -122,11 +122,13 @@ export function renderRouteDetailView(container) {
 
         return s.departureTimes.map((t, i) => {
             const flightNumber = (s.flightNumbers && s.flightNumbers[i]) ? s.flightNumbers[i] : `${state.config.iataCode}${s.id}x${i}`;
-            const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : Math.round(route.distance / 13); // fallback 13km/min roughly 800kmh
-            const arrTotal = t.hour * 60 + t.minute + blockTime;
+            const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : Math.round(route.distance / 13) || 0; // fallback 13km/min roughly 800kmh
+            const depH = parseInt(t.hour) || 0;
+            const depM = parseInt(t.minute) || 0;
+            const arrTotal = depH * 60 + depM + blockTime;
             const arrH = Math.floor(arrTotal / 60) % 24;
             const arrM = arrTotal % 60;
-            const depStr = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
+            const depStr = `${String(depH).padStart(2, '0')}:${String(depM).padStart(2, '0')}`;
             const arrStr = `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
 
             const recentF = routeFlights.find(f => f.flightNumber === flightNumber) || { loadFactor: 0, transferPassengers: 0 };
@@ -154,7 +156,7 @@ export function renderRouteDetailView(container) {
 
     let schedTableHtml = DataTable(headers, schedRows, `
         <div class="empty-state">
-            <div>No schedules configured for this route.</div>
+            <div>No schedules assigned to this route.</div>
             <button class="btn-primary" style="margin-top: 12px;" onclick="document.getElementById('rd-add-schedule').click()">Add Schedule</button>
         </div>
     `);

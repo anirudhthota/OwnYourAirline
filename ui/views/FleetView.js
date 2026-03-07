@@ -178,12 +178,13 @@ function renderFleetList() {
             </tr>
         `;
     }).join('');
-
     statsDiv.innerHTML = `
-        ${StatCard('Avg Utilization', (state.fleet.length ? (totalUtil / state.fleet.length) : 0).toFixed(1) + '%')}
-        ${StatCard('Idle Aircraft', idleCount)}
-        ${StatCard('In Maintenance', maintCount)}
-        ${StatCard('Maint. Due', maintDueCount)}
+        <div style="display:flex; gap:16px; width:100%; overflow-x:auto;">
+            ${StatCard('Avg Utilization', (state.fleet.length ? (totalUtil / state.fleet.length) : 0).toFixed(1) + '%')}
+            ${StatCard('Idle Aircraft', idleCount)}
+            ${StatCard('In Maintenance', maintCount)}
+            ${StatCard('Maint. Due', maintDueCount)}
+        </div>
     `;
 
     listDiv.innerHTML = DataTable(
@@ -265,6 +266,9 @@ function renderAircraftTimeline() {
     if (ac.status === 'maintenance') {
         const remainingHours = Math.ceil((ac.maintenanceReleaseTime - state.clock.totalMinutes) / 60);
         blocksHtml = `<div style="position:absolute; left:0; width:100%; height:100%; background:var(--color-danger,#ef4444); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; font-size:12px;">IN MAINTENANCE (${remainingHours}h remaining)</div>`;
+    } else if (schedules.length === 0) {
+        // Render 24-hour idle block for empty schedule
+        blocksHtml = `<div title="IDLE" style="position:absolute; left:0; width:100%; height:100%; background:var(--bg-surface-highlight); display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px; font-weight:bold;">IDLE</div>`;
     } else {
         // Build flight and turnaround blocks
         schedules.forEach(s => {
