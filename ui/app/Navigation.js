@@ -13,7 +13,7 @@ export function initNavigation() {
     const panels = [
         { id: 'dashboard', label: 'Dashboard', icon: '◈' },
         { id: 'network', label: 'Network', icon: '⎈' },
-        { id: 'hubOps', label: 'Hub Ops', icon: '🏛' },
+        { id: 'hubOperations', label: 'Hub Ops', icon: '🏛' },
         { id: 'fleet', label: 'Fleet', icon: '✈' },
         { id: 'routes', label: 'Routes', icon: '⟿' },
         { id: 'schedule', label: 'Schedule', icon: '◷' },

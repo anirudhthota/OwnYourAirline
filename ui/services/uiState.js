@@ -58,7 +58,7 @@ export function showPanel(panelId) {
     switch (panelId) {
         case 'dashboard': renderDashboard(content); break;
         case 'network': renderNetworkView(content); break;
-        case 'hubOps': renderHubOperationsView(content); break;
+        case 'hubOperations': renderHubOperationsView(content); break;
         case 'fleet': renderFleetPanel(content); break;
         case 'routes': renderRoutesPanel(content); break;
         case 'routeDetail': renderRouteDetailView(content); break;
