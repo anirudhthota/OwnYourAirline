@@ -9,6 +9,9 @@ import { renderRouteDetailView } from '../views/RouteDetailView.js';
 import { renderNetworkView } from '../views/NetworkView.js';
 import { renderAircraftDetailView } from '../views/AircraftDetailView.js';
 import { renderHubOperationsView } from '../views/HubOperationsView.js';
+import { openSchedulePanel } from '../components/SchedulePanel.js';
+
+export { openSchedulePanel };
 
 export const uiState = {
     activeView: 'dashboard',

@@ -5,7 +5,7 @@ import { calculateBlockTime } from '../../engine/routeEngine.js';
 import { getAircraftByType } from '../../data/aircraft.js';
 import { StatCard } from '../components/StatCard.js';
 import { DataTable } from '../components/DataTable.js';
-import { uiState, showPanel } from '../services/uiState.js';
+import { uiState, showPanel, openSchedulePanel } from '../services/uiState.js';
 import { openSwapAircraftModal } from './RoutesView.js';
 
 export function renderRouteDetailView(container) {
@@ -260,15 +260,16 @@ export function renderRouteDetailView(container) {
         btn.addEventListener('click', triggerSwap);
     });
 
-    // Add Schedule Button (Fallback placeholder)
+    // Add Schedule Button
     container.querySelector('#rd-add-schedule').addEventListener('click', () => {
-        alert("Scheduling currently managed via Route Creator in the main Routes view.");
+        openSchedulePanel({ routeId: route.id, mode: 'create' });
     });
 
     // Row actions
     container.querySelectorAll('.js-edit-sched').forEach(btn => {
         btn.addEventListener('click', () => {
-            alert("Schedule Editing to be implemented in Phase 3.");
+            const sid = parseInt(btn.dataset.schedId);
+            openSchedulePanel({ mode: 'edit', scheduleId: sid });
         });
     });
 
