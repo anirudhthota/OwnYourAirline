@@ -1,6 +1,6 @@
 import { getState, addLogEntry, deductCash, addCash, formatMoney, MINUTES_PER_YEAR, MINUTES_PER_DAY } from './state.js';
 import { getAircraftByType, AIRCRAFT_TYPES, DEPRECIATION_RATE_ANNUAL, LEASE_DEPOSIT_MONTHS, MAINTENANCE_RULES } from '../data/aircraft.js';
-import { AIRPORTS } from '../data/airports.js';
+import { AIRPORTS, getDistanceBetweenAirports } from '../data/airports.js';
 import { getSchedulesByAircraft } from './scheduler.js';
 
 export const OWNERSHIP_TYPE = {
@@ -411,7 +411,7 @@ export function addFreeAircraftToFleet(aircraftType) {
 export function startMaintenance(aircraftId) {
     const state = getState();
     const aircraft = state.fleet.find(a => a.id === aircraftId);
-    
+
     if (!aircraft) return false;
     if (aircraft.status !== 'maintenance_due' || !aircraft.pendingCheckType) {
         addLogEntry(`Cannot start maintenance for aircraft ${aircraft.registration}.`, 'error');

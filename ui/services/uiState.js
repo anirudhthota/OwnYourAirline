@@ -13,12 +13,8 @@ export const uiState = {
 };
 
 export function openRouteDetail(routeId) {
-    uiState.activeView = 'routeDetail';
     uiState.activeRouteId = routeId;
-    const content = document.getElementById('panel-content');
-    if (content) {
-        renderRouteDetailView(content);
-    }
+    showPanel('routeDetail');
 }
 
 export function formatLocation(ac) {
@@ -50,6 +46,7 @@ export function showPanel(panelId) {
         case 'dashboard': renderDashboard(content); break;
         case 'fleet': renderFleetPanel(content); break;
         case 'routes': renderRoutesPanel(content); break;
+        case 'routeDetail': renderRouteDetailView(content); break;
         case 'schedule': renderSchedulePanel(content); break;
         case 'finances': renderFinancesPanel(content); break;
         case 'log': renderLogPanel(content); break;

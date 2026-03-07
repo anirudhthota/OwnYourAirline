@@ -894,24 +894,26 @@ function renderRouteList() {
         `;
     }).join('');
     // Use event delegation for route actions since listDiv content may be rebuilt dynamically
-    listDiv.addEventListener('click', (e) => {
-        const detailBtn = e.target.closest('[data-detail-route]');
-        if (detailBtn) {
-            const id = parseInt(detailBtn.dataset.detailRoute);
-            openRouteDetail(id);
-            return;
-        }
+    if (!listDiv.dataset.delegated) {
+        listDiv.dataset.delegated = 'true';
+        listDiv.addEventListener('click', (e) => {
+            const detailBtn = e.target.closest('[data-detail-route]');
+            if (detailBtn) {
+                const id = parseInt(detailBtn.dataset.detailRoute);
+                openRouteDetail(id);
+                return;
+            }
 
-        const deleteBtn = e.target.closest('[data-delete-route]');
-        if (deleteBtn) {
-            const id = parseInt(deleteBtn.dataset.deleteRoute);
-            const route = getRouteById(id);
-            if (!route) return;
+            const deleteBtn = e.target.closest('[data-delete-route]');
+            if (deleteBtn) {
+                const id = parseInt(deleteBtn.dataset.deleteRoute);
+                const route = getRouteById(id);
+                if (!route) return;
 
-            const pairedRoute = route.pairedRouteId ? getRouteById(route.pairedRouteId) : null;
+                const pairedRoute = route.pairedRouteId ? getRouteById(route.pairedRouteId) : null;
 
-            if (pairedRoute) {
-                const body = showModal('Delete Paired Route', `
+                if (pairedRoute) {
+                    const body = showModal('Delete Paired Route', `
                     <p>This route <strong>${route.origin} → ${route.destination}</strong> is paired with <strong>${pairedRoute.origin} → ${pairedRoute.destination}</strong>.</p>
                     <div class="modal-actions">
                         <button class="btn-accent" id="del-both-btn">Delete Both Routes</button>
@@ -919,43 +921,43 @@ function renderRouteList() {
                         <button class="btn-secondary" id="del-cancel-btn">Cancel</button>
                     </div>
                 `);
-                body.querySelector('#del-both-btn').addEventListener('click', () => {
-                    pairedRoute.pairedRouteId = null;
-                    deleteRoute(id);
-                    deleteRoute(pairedRoute.id);
-                    closeModal();
-                    renderRouteList();
-                    renderMap();
-                    updateHUD();
-                });
-                body.querySelector('#del-one-btn').addEventListener('click', () => {
-                    pairedRoute.pairedRouteId = null;
-                    deleteRoute(id);
-                    closeModal();
-                    renderRouteList();
-                    renderMap();
-                    updateHUD();
-                });
-                body.querySelector('#del-cancel-btn').addEventListener('click', () => {
-                    closeModal();
-                });
-            } else {
-                if (deleteRoute(id)) {
-                    renderRouteList();
-                    renderMap();
-                    updateHUD();
+                    body.querySelector('#del-both-btn').addEventListener('click', () => {
+                        pairedRoute.pairedRouteId = null;
+                        deleteRoute(id);
+                        deleteRoute(pairedRoute.id);
+                        closeModal();
+                        renderRouteList();
+                        renderMap();
+                        updateHUD();
+                    });
+                    body.querySelector('#del-one-btn').addEventListener('click', () => {
+                        pairedRoute.pairedRouteId = null;
+                        deleteRoute(id);
+                        closeModal();
+                        renderRouteList();
+                        renderMap();
+                        updateHUD();
+                    });
+                    body.querySelector('#del-cancel-btn').addEventListener('click', () => {
+                        closeModal();
+                    });
+                } else {
+                    if (deleteRoute(id)) {
+                        renderRouteList();
+                        renderMap();
+                        updateHUD();
+                    }
                 }
+                return;
             }
-            return;
-        }
 
-        const swapBtn = e.target.closest('[data-swap-route]');
-        if (swapBtn) {
-            const routeId = parseInt(swapBtn.dataset.swapRoute);
-            openSwapAircraftModal(routeId);
-            return;
-        }
-    });
+            const swapBtn = e.target.closest('[data-swap-route]');
+            if (swapBtn) {
+                const routeId = parseInt(swapBtn.dataset.swapRoute);
+                openSwapAircraftModal(routeId);
+            }
+        });
+    }
 }
 
 export function openSwapAircraftModal(routeId) {
