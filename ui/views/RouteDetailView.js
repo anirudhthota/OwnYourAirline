@@ -44,7 +44,7 @@ export function renderRouteDetailView(container) {
     const profitPerPassenger = passengersToday > 0 ? profitToday / passengersToday : 0;
 
     // Capacity & Demand
-    const localDemand = calculateRouteDemand(route);
+    const localDemand = calculateRouteDemand(origin, dest, route.distance);
     const transferDemandMap = state.transfers.flowRates[`${route.origin}-${route.destination}`];
     const transferDemand = transferDemandMap ? transferDemandMap.demand : 0;
     const totalDemand = localDemand + transferDemand;

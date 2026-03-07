@@ -8,7 +8,7 @@ import { getAICompetitorsOnRoute } from '../../engine/aiEngine.js';
 import { getSlotUsageForAirport } from '../../engine/sim.js';
 import { updateHUD } from '../hud.js';
 import { renderMap } from '../map.js';
-import { formatLocation, openRouteDetail } from '../services/uiState.js';
+import { uiState, formatLocation, openRouteDetail } from '../services/uiState.js';
 import { showConfirm, showModal, closeModal } from '../components/Modal.js';
 
 export function renderRoutesPanel(container) {
@@ -893,17 +893,18 @@ function renderRouteList() {
             </div>
         `;
     }).join('');
-
-    listDiv.querySelectorAll('[data-detail-route]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = parseInt(btn.dataset.detailRoute);
+    // Use event delegation for route actions since listDiv content may be rebuilt dynamically
+    listDiv.addEventListener('click', (e) => {
+        const detailBtn = e.target.closest('[data-detail-route]');
+        if (detailBtn) {
+            const id = parseInt(detailBtn.dataset.detailRoute);
             openRouteDetail(id);
-        });
-    });
+            return;
+        }
 
-    listDiv.querySelectorAll('[data-delete-route]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const id = parseInt(btn.dataset.deleteRoute);
+        const deleteBtn = e.target.closest('[data-delete-route]');
+        if (deleteBtn) {
+            const id = parseInt(deleteBtn.dataset.deleteRoute);
             const route = getRouteById(id);
             if (!route) return;
 
@@ -945,14 +946,15 @@ function renderRouteList() {
                     updateHUD();
                 }
             }
-        });
-    });
+            return;
+        }
 
-    listDiv.querySelectorAll('[data-swap-route]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const routeId = parseInt(btn.dataset.swapRoute);
+        const swapBtn = e.target.closest('[data-swap-route]');
+        if (swapBtn) {
+            const routeId = parseInt(swapBtn.dataset.swapRoute);
             openSwapAircraftModal(routeId);
-        });
+            return;
+        }
     });
 }
 
