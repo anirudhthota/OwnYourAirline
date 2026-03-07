@@ -8,6 +8,7 @@ import { renderLogPanel } from '../views/LogView.js';
 import { renderRouteDetailView } from '../views/RouteDetailView.js';
 import { renderNetworkView } from '../views/NetworkView.js';
 import { renderAircraftDetailView } from '../views/AircraftDetailView.js';
+import { renderHubOperationsView } from '../views/HubOperationsView.js';
 
 export const uiState = {
     activeView: 'dashboard',
@@ -57,6 +58,7 @@ export function showPanel(panelId) {
     switch (panelId) {
         case 'dashboard': renderDashboard(content); break;
         case 'network': renderNetworkView(content); break;
+        case 'hubOps': renderHubOperationsView(content); break;
         case 'fleet': renderFleetPanel(content); break;
         case 'routes': renderRoutesPanel(content); break;
         case 'routeDetail': renderRouteDetailView(content); break;
