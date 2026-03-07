@@ -30,7 +30,7 @@ OwnYourAirline/
     ├── app/                — AppShell and main panel routing
     ├── components/         — Reusable UI components (DataTable, StatCard, Toolbar, Modal)
     ├── services/           — UI-only state (uiState.js)
-    ├── views/              — Modular view panels (DashboardView, FleetView, RoutesView, etc.)
+    ├── views/              — Modular view panels (DashboardView, FleetView, RoutesView, NetworkView, etc.)
     ├── map.js              — Canvas/Leaflet world map
     ├── hud.js              — Top HUD bar
     ├── newGame.js          — New game setup screen

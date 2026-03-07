@@ -127,6 +127,7 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - **Task 1: Modular UI Refactor** — Migrated the monolithic `panels.js` rendering architecture into a clean, modular structure utilizing `/ui/views`, `/ui/components`, and `/ui/services/uiState.js`. Existing engine APIs preserved entirely.
 - **Task 2: Fleet Operations Screen** — Replaced the legacy fleet list with a unified data-dense Operations Table utilizing a dynamic `DataTable` component. Computes 24-hour exact utilization %, flights today, and today profit directly from simulation arrays natively on render.
 - **Task 3: Aircraft 24-Hour Timeline** — Added a dynamic Gantt-style 24-hour visual timeline panel that instantly maps inherited structural simulation schedules for a selected aircraft. Renders Flight (blue), Turnaround (amber), and Maintenance (red) blocks directly to screen, featuring explicit split logic for midnight-crossing blocks without overlapping intervals or engine state dependencies. Includes Selected Aircraft detail header and responsive color Legend.
+- **Task 4: Network Route Analytics** — Created `NetworkView.js` featuring a data-dense sortable table and summary KPIs tracking route performance via a strict 1440-minute lookback window across `state.flights.completed` and `state.schedules`. Surfaces derived 'Spill' and exact load factors per route natively, bridging navigation flows seamlessly to `RouteDetailView`.
 
 ### Phase 3 Roadmap
 

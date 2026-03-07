@@ -6,6 +6,7 @@ import { renderSchedulePanel } from '../views/SchedulesView.js';
 import { renderFinancesPanel } from '../views/FinanceView.js';
 import { renderLogPanel } from '../views/LogView.js';
 import { renderRouteDetailView } from '../views/RouteDetailView.js';
+import { renderNetworkView } from '../views/NetworkView.js';
 
 export const uiState = {
     activeView: 'dashboard',
@@ -47,6 +48,7 @@ export function showPanel(panelId) {
 
     switch (panelId) {
         case 'dashboard': renderDashboard(content); break;
+        case 'network': renderNetworkView(content); break;
         case 'fleet': renderFleetPanel(content); break;
         case 'routes': renderRoutesPanel(content); break;
         case 'routeDetail': renderRouteDetailView(content); break;

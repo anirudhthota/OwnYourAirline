@@ -60,7 +60,7 @@ These decisions have been made and must not be changed:
 
 **Phase 1 (Complete):** Core loop — fleet management, route creation, scheduling, flight operations, basic AI, world map, financial tracking, save/load, dark theme UI, DEVMODE console.
 
-**Phase 2 (Sessions A-G Complete):** Directional routes, aircraft status badges, turnaround enforcement, slot model V1 (5 levels), daily P&L with canvas bar chart, used aircraft market, starter fleet logic, map improvements (14 continent polygons, viewport culling, AI route cap), Fleet Operations UI (Data-dense operations table with 24-hour graphical timeline for selected aircraft).
+**Phase 2 (Sessions A-G Complete):** Directional routes, aircraft status badges, turnaround enforcement, slot model V1 (5 levels), daily P&L with canvas bar chart, used aircraft market, starter fleet logic, map improvements (14 continent polygons, viewport culling, AI route cap), Fleet Operations UI (Data-dense operations table with 24-hour graphical timeline for selected aircraft), Network Analytics UI (Sortable route KPI performance table with 24-hour metrics).
 
 **Phase 3 (Planned):** Event system (random events), alliance system, aircraft maintenance model, route profitability breakdown, AI competition effects on demand, passenger class model, codeshare agreements.
 
