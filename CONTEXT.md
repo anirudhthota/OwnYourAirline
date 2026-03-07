@@ -47,6 +47,7 @@ These decisions have been made and must not be changed:
 - **Canvas-only charts.** No external charting libraries. All graphs drawn directly on `<canvas>`.
 - **Aircraft Physical Location & Ferrying:** Aircraft strictly track their physical location (hub, foreign airports, or airborne). Players must ferry used aircraft to the hub paying distance-based costs if they intend to mobilize them from the hub.
 - **Engine Simulation Strictness:** The engine mathematically and strictly enforces slot capacity, prevents schedule wrap-around interval overlaps, mandates strict turnaround limits, and prevents silent cascading cancellations via an active `delayedFlights` queue.
+- **Schedule Auto-Calculation:** Bi-directional paired routes automatically project departure times backward and forward using canonical block and turnaround times (outbound-first auto-fill or return-first backward calculation). The UI inherently captures day rollovers (`+1 Day`/`-1 Day`) dynamically via modulo boundaries. End-user manual overrides gracefully break UI execution locks, and single unpaired routes organically suppress paired return input visuals.
 - **One airline per game.** No multi-airline or subsidiary model.
 
 ## What This Game Is NOT
@@ -60,7 +61,7 @@ These decisions have been made and must not be changed:
 
 **Phase 1 (Complete):** Core loop — fleet management, route creation, scheduling, flight operations, basic AI, world map, financial tracking, save/load, dark theme UI, DEVMODE console.
 
-**Phase 2 (Sessions A-G Complete):** Directional routes, aircraft status badges, turnaround enforcement, slot model V1 (5 levels), daily P&L with canvas bar chart, used aircraft market, starter fleet logic, map improvements (14 continent polygons, viewport culling, AI route cap), Fleet Operations UI (Data-dense operations table with 24-hour graphical timeline for selected aircraft), Network Analytics UI (Sortable route KPI performance table with 24-hour metrics), Aircraft Detail View (Deep dive operational control panel for individual aircraft), Hub Operations View (Transfer analytics and bank visualization).
+**Phase 2 (Sessions A-H Complete):** Directional routes, aircraft status badges, turnaround enforcement, slot model V1 (5 levels), daily P&L with canvas bar chart, used aircraft market, starter fleet injection, route-range enforcement, fleet-wide maintenance schedules natively integrated, Schedule Auto-Calculation, Fleet Operations UI (Data-dense operations table with 24-hour graphical timeline for selected aircraft), Network Analytics UI (Sortable route KPI performance table with 24-hour metrics), Aircraft Detail View (Deep dive operational control panel for individual aircraft), Hub Operations View (Transfer analytics and bank visualization).
 
 **Phase 3 (Planned):** Event system (random events), alliance system, aircraft maintenance model, route profitability breakdown, AI competition effects on demand, passenger class model, codeshare agreements.
 
