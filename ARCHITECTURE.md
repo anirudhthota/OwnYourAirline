@@ -27,11 +27,13 @@ OwnYourAirline/
 │   └── aiEngine.js         — AI airline initialization, route generation, monthly expansion
 │
 └── ui/                     — UI rendering (reads state, manipulates DOM)
-    ├── panels.js           — All 6 side panels (Dashboard, Fleet, Routes, Schedule, Finances, Log)
-    ├── map.js              — Canvas world map with continents, routes, airports, flights
-    ├── hud.js              — Top HUD bar (airline info, time, speed controls, stats)
-    ├── newGame.js          — New game setup screen (airline config, hub selection, difficulty)
-    ├── modals.js           — Generic modal and confirm dialog system
+    ├── app/                — AppShell and main panel routing
+    ├── components/         — Reusable UI components (DataTable, StatCard, Toolbar, Modal)
+    ├── services/           — UI-only state (uiState.js)
+    ├── views/              — Modular view panels (DashboardView, FleetView, RoutesView, etc.)
+    ├── map.js              — Canvas/Leaflet world map
+    ├── hud.js              — Top HUD bar
+    ├── newGame.js          — New game setup screen
     └── dailyPnl.js         — Daily P&L slide-in notification
 ```
 

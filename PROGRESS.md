@@ -122,6 +122,12 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
   - **Step 3:** Intercepted the simulation loop at the `launchFlight` function directly where local `loadFactor` math binds to available seating. Deducts physical seats mathematically across both Outbound and Inbound abstracted variables *simultaneously* via `Math.min`. Retains base Local-Passenger-First sequence requirements by boarding transfers strictly upon initial unbooked capacity blocks prior to calculating final load bounds.
   - **Step 4:** Embedded `transferPassengers` dynamically aggregated matrices inside `ui/panels.js`. Modified the Dashboard Summary payload natively via array reduction across `.flights.completed` for all-time stats, and appended the `24h Transfers` label precisely onto standard `route-card` outputs utilizing 1440-minute lookback checks independently of engine execution.
 
+### Session G (UI Modularity & Fleet Operations)
+
+- **Task 1: Modular UI Refactor** — Migrated the monolithic `panels.js` rendering architecture into a clean, modular structure utilizing `/ui/views`, `/ui/components`, and `/ui/services/uiState.js`. Existing engine APIs preserved entirely.
+- **Task 2: Fleet Operations Screen** — Replaced the legacy fleet list with a unified data-dense Operations Table utilizing a dynamic `DataTable` component. Computes 24-hour exact utilization %, flights today, and today profit directly from simulation arrays natively on render.
+- **Task 3: Aircraft 24-Hour Timeline** — Added a dynamic Gantt-style 24-hour visual timeline panel that instantly maps inherited structural simulation schedules for a selected aircraft. Renders Flight (blue), Turnaround (amber), and Maintenance (red) blocks directly to screen, featuring explicit split logic for midnight-crossing blocks without overlapping intervals or engine state dependencies. Includes Selected Aircraft detail header and responsive color Legend.
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs

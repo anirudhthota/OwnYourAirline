@@ -1,7 +1,7 @@
 import { getState, formatMoney } from '../../engine/state.js';
 import { getAirportByIata } from '../../data/airports.js';
-import { getRouteById, calculateRouteDemand } from '../../engine/routeEngine.js';
 import { getSchedulesByRoute, deleteSchedule } from '../../engine/scheduler.js';
+import { calculateBlockTime } from '../../engine/routeEngine.js';
 import { getAircraftByType } from '../../data/aircraft.js';
 import { StatCard } from '../components/StatCard.js';
 import { DataTable } from '../components/DataTable.js';
@@ -122,7 +122,8 @@ export function renderRouteDetailView(container) {
 
         return s.departureTimes.map((t, i) => {
             const flightNumber = (s.flightNumbers && s.flightNumbers[i]) ? s.flightNumbers[i] : `${state.config.iataCode}${s.id}x${i}`;
-            const arrTotal = t.hour * 60 + t.minute + Math.round(route.distance / (acData ? acData.speedKmh : 800) * 60);
+            const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : Math.round(route.distance / 13); // fallback 13km/min roughly 800kmh
+            const arrTotal = t.hour * 60 + t.minute + blockTime;
             const arrH = Math.floor(arrTotal / 60) % 24;
             const arrM = arrTotal % 60;
             const depStr = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
