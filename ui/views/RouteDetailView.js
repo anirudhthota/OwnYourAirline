@@ -44,9 +44,14 @@ export function renderRouteDetailView(container) {
     const profitPerPassenger = passengersToday > 0 ? profitToday / passengersToday : 0;
 
     // Capacity & Demand
-    const localDemand = calculateRouteDemand(origin, dest, route.distance);
+    const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
+    const priceElasticity = Math.max(0.25, 1 - (multiplier - 1) * 0.8);
+    const localDemand = calculateRouteDemand(origin, dest, route.distance) * priceElasticity;
+
     const transferDemandMap = state.transfers.flowRates[`${route.origin}-${route.destination}`];
-    const transferDemand = transferDemandMap ? transferDemandMap.demand : 0;
+    const transferElasticity = Math.max(0, 1 - (multiplier - 1) * 1.2);
+    const transferDemand = transferDemandMap ? (transferDemandMap.demand || transferDemandMap.potentialTransferDemand) * transferElasticity : 0;
+
     const totalDemand = localDemand + transferDemand;
 
     // Calculate Seats Today (Flown)
@@ -165,16 +170,45 @@ export function renderRouteDetailView(container) {
     const capacityHtml = `
         <h2 class="uc-section-title">Capacity Analysis</h2>
         <div class="dashboard-grid" style="margin-bottom: 24px; display:grid; grid-template-columns: repeat(3, 1fr) !important;">
-            ${StatCard('Local Demand', localDemand.toLocaleString() + ' pax/day')}
+            ${StatCard('Local Demand', Math.round(localDemand).toLocaleString() + ' pax/day')}
             ${StatCard('Transfer Demand', Math.floor(transferDemand).toLocaleString() + ' pax/day')}
-            ${StatCard('Total Demand', totalDemand.toLocaleString() + ' pax/day')}
+            ${StatCard('Total Demand', Math.round(totalDemand).toLocaleString() + ' pax/day')}
             ${StatCard('Seats Offered', seatsOffered.toLocaleString() + ' seats/day')}
             ${StatCard('Projected Load Factor', (projectedLF * 100).toFixed(1) + '%')}
-            ${StatCard('Projected Spill', spill.toLocaleString() + ' unserved/day')}
+            ${StatCard('Projected Spill', Math.round(spill).toLocaleString() + ' unserved/day')}
         </div>
     `;
 
-    // 5. Economics
+    // 5. Fare Strategy
+    const baseTicketPrice = route.baseFare;
+    const effectiveTicketPrice = baseTicketPrice * multiplier;
+
+    const fareStrategyHtml = `
+        <h2 class="uc-section-title">Fare Strategy</h2>
+        <div style="margin-bottom: 24px; padding: 20px; background: var(--bg-surface-highlight); border-radius: 8px; border: 1px solid var(--border-color);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <label style="font-weight: bold; font-size: 14px;">Fare Multiplier: <span id="rd-fare-val" style="color:var(--accent-blue);">${multiplier.toFixed(2)}x</span></label>
+                <div style="display:flex; gap: 20px;">
+                    <div style="text-align: right;">
+                        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Ticket Price</div>
+                        <div id="rd-fare-price" style="font-size: 16px; font-weight: bold; font-family: var(--font-mono);">$${Math.round(effectiveTicketPrice)}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Demand Impact</div>
+                        <div id="rd-fare-impact" style="font-size: 16px; font-weight: bold; font-family: var(--font-mono); color: ${priceElasticity < 1 ? 'var(--color-danger)' : 'var(--color-success)'};">${(priceElasticity * 100).toFixed(0)}%</div>
+                    </div>
+                </div>
+            </div>
+            <input type="range" id="rd-fare-slider" min="0.75" max="1.50" step="0.01" value="${multiplier}" style="width: 100%; cursor: pointer;">
+            <div style="display:flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                <span>0.75x (Discount)</span>
+                <span>1.00x (Standard)</span>
+                <span>1.50x (Premium)</span>
+            </div>
+        </div>
+    `;
+
+    // 6. Economics
     const economicsHtml = `
         <h2 class="uc-section-title">Route Economics (Last 24h)</h2>
         <div class="dashboard-grid" style="margin-bottom: 24px;">
@@ -190,9 +224,9 @@ export function renderRouteDetailView(container) {
     const placeholderHtml = `
         <h2 class="uc-section-title" style="color:var(--text-muted)">Advanced Route Management (Future)</h2>
         <div style="display:grid; grid-template-columns: repeat(3, 1fr) !important; gap: 16px; margin-bottom: 24px; opacity: 0.5; pointer-events: none;">
-            <div class="dash-card">Route Pricing <br><small>Unlock advanced revenue management</small></div>
             <div class="dash-card">Competitor Analysis <br><small>View rival schedules and fares</small></div>
             <div class="dash-card">Slot Constraints <br><small>Manage premium airport access</small></div>
+            <div class="dash-card">Service Adjustments <br><small>Configure soft products</small></div>
         </div>
     `;
 
@@ -203,6 +237,7 @@ export function renderRouteDetailView(container) {
             <h2 class="uc-section-title">Schedules & Aircraft</h2>
             ${schedTableHtml}
             ${capacityHtml}
+            ${fareStrategyHtml}
             ${economicsHtml}
             ${placeholderHtml}
         </div>
@@ -255,5 +290,35 @@ export function renderRouteDetailView(container) {
             swapBtn.innerHTML = 'Assign Aircraft';
             swapBtn.className = 'btn-primary';
         }
+    }
+
+    // Interactive Fare Slider logic
+    const fareSlider = container.querySelector('#rd-fare-slider');
+    const fareValLabel = container.querySelector('#rd-fare-val');
+    const farePriceLabel = container.querySelector('#rd-fare-price');
+    const fareImpactLabel = container.querySelector('#rd-fare-impact');
+
+    if (fareSlider) {
+        fareSlider.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value);
+            if (val < 0.75) val = 0.75;
+            if (val > 1.50) val = 1.50;
+
+            // Only update UI labels instantly to avoid layout thrashing
+            fareValLabel.textContent = val.toFixed(2) + 'x';
+            farePriceLabel.textContent = '$' + Math.round(route.baseFare * val);
+
+            const dynElasticity = Math.max(0.25, 1 - (val - 1) * 0.8);
+            fareImpactLabel.textContent = (dynElasticity * 100).toFixed(0) + '%';
+            fareImpactLabel.style.color = dynElasticity < 1 ? 'var(--color-danger)' : 'var(--color-success)';
+        });
+
+        fareSlider.addEventListener('change', (e) => {
+            let val = parseFloat(e.target.value);
+            if (val < 0.75) val = 0.75;
+            if (val > 1.50) val = 1.50;
+            route.fareMultiplier = val;
+            renderRouteDetailView(container);
+        });
     }
 }

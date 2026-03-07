@@ -142,7 +142,8 @@ engine/ files              ui/ files
     demand: 150,                    // pax/day
     baseFare: 580,                  // $ per pax
     createdDate: 360,               // totalMinutes
-    slotCostPaid: 500000            // one-time fee paid
+    slotCostPaid: 500000,           // one-time fee paid
+    fareMultiplier: 1.0             // Price multiplier affecting demand elasticity (0.75-1.50)
 }
 ```
 

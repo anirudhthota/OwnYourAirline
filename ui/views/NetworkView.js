@@ -42,7 +42,7 @@ function renderNetworkContent() {
             ${StatCard('Est. Spill', '0')}
         `;
         tableContainer.innerHTML = DataTable(
-            ['Route', 'Distance', 'Aircraft', 'Flights', 'Pax', 'Load', 'Revenue', 'Costs', 'Profit', 'Spill', 'Transfers', 'Status'],
+            ['Route', 'Distance', 'Aircraft', 'Fare Mult', 'Flights', 'Pax', 'Load', 'Revenue', 'Costs', 'Profit', 'Spill', 'Transfers', 'Status'],
             '',
             '<div class="empty-state" style="padding: 40px; text-align: center; color: var(--text-muted);">No completed flights in the last 24 hours.<br>Analytics will populate once flights arrive.</div>'
         );
@@ -115,9 +115,11 @@ function renderNetworkContent() {
         totalCapacitySum += rCapacity;
 
         // Spill
-        // Demand is daily pax. capacity is what's scheduled. or what's flown.
-        // Let's use strict daily demand minus what we were physically able to schedule/fly.
-        let rSpill = Math.max(0, route.demand - rPax);
+        const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
+        const priceElasticity = Math.max(0.25, 1 - (multiplier - 1) * 0.8);
+        const effectiveDemand = route.demand * priceElasticity;
+
+        let rSpill = Math.max(0, effectiveDemand - rPax);
         networkSpill += rSpill;
 
         let statusText = 'OK';
@@ -142,6 +144,7 @@ function renderNetworkContent() {
             dest: route.destination,
             distance: route.distance,
             aircraft: acString,
+            fareMultiplier: multiplier,
             flights: flightsToday,
             pax: rPax,
             loadFactor: rLoadFactor,
@@ -191,6 +194,7 @@ function renderNetworkContent() {
                 <td><strong>${r.origin} \u2192 ${r.dest}</strong></td>
                 <td>${r.distance} km</td>
                 <td style="font-size:11px;">${r.aircraft}</td>
+                <td style="font-family:var(--font-mono); color:var(--text-muted);">${r.fareMultiplier.toFixed(2)}x</td>
                 <td>${r.flights}</td>
                 <td>${r.pax.toLocaleString()}</td>
                 <td>
@@ -202,7 +206,7 @@ function renderNetworkContent() {
                 <td style="font-family:var(--font-mono); color:var(--text-muted);">$${formatMoney(r.rev)}</td>
                 <td style="font-family:var(--font-mono); color:var(--text-muted);">$${formatMoney(r.cost)}</td>
                 <td style="font-family:var(--font-mono); color:${profitColor}; font-weight:bold;">$${formatMoney(r.profit)}</td>
-                <td style="color:${r.spill > 0 ? 'var(--color-warning)' : 'inherit'};">${r.spill}</td>
+                <td style="color:${r.spill > 0 ? 'var(--color-warning)' : 'inherit'};">${Math.round(r.spill)}</td>
                 <td style="color:var(--color-info);">${r.transfers}</td>
                 <td><span class="badge" style="background:${r.color}; color:#fff;">${r.status}</span></td>
             </tr>
@@ -218,7 +222,7 @@ function renderNetworkContent() {
     ]);
 
     tableContainer.innerHTML = DataTable(
-        ['Route', 'Distance', 'Aircraft', 'Flights Today', 'Pax', 'Load Factor', 'Revenue', 'Costs', 'Profit', 'Spill', 'Transfers', 'Status'],
+        ['Route', 'Distance', 'Aircraft', 'Fare Mult', 'Flights Today', 'Pax', 'Load Factor', 'Revenue', 'Costs', 'Profit', 'Spill', 'Transfers', 'Status'],
         rowsHtml
     );
 

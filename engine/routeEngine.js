@@ -48,7 +48,8 @@ export function createRoute(originIata, destinationIata) {
         baseFare: calculateBaseFare(distance),
         createdDate: state.clock.totalMinutes,
         slotCostPaid: originSlotCost,
-        pairedRouteId: null
+        pairedRouteId: null,
+        fareMultiplier: 1.0
     };
 
     state.routes.push(route);
@@ -112,7 +113,11 @@ export function calculateRouteDemand(origin, dest, distance) {
 
 export function calculateLoadFactor(route, totalSeatsOffered) {
     if (totalSeatsOffered === 0) return 0;
-    const dailyDemand = route.demand;
+
+    const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
+    const priceElasticity = Math.max(0.25, 1 - (multiplier - 1) * 0.8);
+    const dailyDemand = route.demand * priceElasticity;
+
     const ratio = dailyDemand / totalSeatsOffered;
 
     if (ratio >= 2.0) return 0.95;
@@ -125,8 +130,9 @@ export function calculateLoadFactor(route, totalSeatsOffered) {
 
 export function calculateFlightRevenue(route, seats, loadFactor) {
     const passengers = Math.round(seats * loadFactor);
-    const fare = route.baseFare;
-    return Math.round(passengers * fare);
+    const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
+    const ticketPrice = route.baseFare * multiplier;
+    return Math.round(passengers * ticketPrice);
 }
 
 export function calculateFlightCost(route, aircraftType) {

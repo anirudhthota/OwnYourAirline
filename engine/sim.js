@@ -189,7 +189,7 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNu
 
     // --- Step 2: Transfer Demand Injection on REMAINING Seats ---
     let transferPassengers = 0;
-    
+
     for (const [routeKey, flowData] of Object.entries(state.transfers.flowRates)) {
         const isInbound = flowData.inboundRouteId === route.id;
         const isOutbound = flowData.outboundRouteId === route.id;
@@ -210,12 +210,17 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNu
         const otherRemainingGlobally = Math.max(0, otherTotalSeats - Math.round(otherTotalSeats * otherLocalLF));
 
         const currentlyBoardedType = isInbound ? flowData.inboundDemandBoarded : flowData.outboundDemandBoarded;
-        const remainingDemand = Math.max(0, flowData.potentialTransferDemand - currentlyBoardedType);
+
+        const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
+        const transferElasticity = Math.max(0, 1 - (multiplier - 1) * 1.2);
+        const adjustedPotentialDemand = flowData.potentialTransferDemand * transferElasticity;
+
+        const remainingDemand = Math.max(0, adjustedPotentialDemand - currentlyBoardedType);
 
         // Passengers may only board if both legs abstractly have available seats this day
         const boardedTransfers = Math.min(
-            remainingSeatsAfterLocal, 
-            otherRemainingGlobally, 
+            remainingSeatsAfterLocal,
+            otherRemainingGlobally,
             remainingDemand
         );
 
@@ -234,11 +239,14 @@ function launchFlight(schedule, route, aircraft, depTime, delayMinutes, flightNu
 
     // --- Step 3: Final Flight Totals ---
     const totalBoarded = localPassengers + transferPassengers;
-    
+
     // Revenue applies identically to both transfer and local pools for V1
-    const revenue = Math.round(totalBoarded * route.baseFare);
+    const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
+    const ticketPrice = route.baseFare * multiplier;
+    const revenue = Math.round(totalBoarded * ticketPrice);
+
     const cost = calculateFlightCost(route, aircraft.type);
-    
+
     // Exact structural load factor accounting for transfers
     const finalLoadFactor = acData.seats > 0 ? totalBoarded / acData.seats : 0;
 
@@ -319,13 +327,13 @@ function processActiveFlights() {
 
             if (aircraft.status === 'maintenance_due') {
                 aircraft.graceHoursRemaining -= flightHours;
-                
+
                 if (aircraft.graceHoursRemaining <= 0) {
                     aircraft.status = 'maintenance';
                     const rule = MAINTENANCE_RULES[aircraft.pendingCheckType];
                     // Unassign schedules before release time
                     aircraft.maintenanceReleaseTime = state.clock.totalMinutes + rule.durationMinutes;
-                    
+
                     // Reset Counters
                     const checkType = aircraft.pendingCheckType;
                     if (checkType === 'C') {
@@ -342,7 +350,7 @@ function processActiveFlights() {
                     aircraft.graceHoursRemaining = 0;
 
                     deductCash(rule.cost, `Forced ${checkType}-Check Maintenance (${aircraft.registration})`, true);
-                    
+
                     // Maintenance Queue Protection
                     state.schedules.forEach(s => {
                         if (s.aircraftId === aircraft.id) s.aircraftId = null;
@@ -354,7 +362,7 @@ function processActiveFlights() {
                 if (aircraft.hoursSinceCCheck >= MAINTENANCE_RULES.C.threshold) dueCheck = 'C';
                 else if (aircraft.hoursSinceBCheck >= MAINTENANCE_RULES.B.threshold) dueCheck = 'B';
                 else if (aircraft.hoursSinceACheck >= MAINTENANCE_RULES.A.threshold) dueCheck = 'A';
-                
+
                 if (dueCheck) {
                     aircraft.status = 'maintenance_due';
                     aircraft.pendingCheckType = dueCheck;
