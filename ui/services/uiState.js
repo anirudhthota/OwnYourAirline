@@ -14,6 +14,7 @@ export const uiState = {
 
 export function openRouteDetail(routeId) {
     uiState.activeRouteId = routeId;
+    uiState.activeView = 'routeDetail';
     showPanel('routeDetail');
 }
 
@@ -29,7 +30,9 @@ export function showPanel(panelId) {
     const state = getState();
     if (state) state.ui.selectedPanel = panelId;
     uiState.activeView = panelId;
-    uiState.activeRouteId = null;
+    if (panelId !== 'routeDetail') {
+        uiState.activeRouteId = null;
+    }
 
     const content = document.getElementById('panel-content');
     if (!content) return;
