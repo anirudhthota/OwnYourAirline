@@ -5,6 +5,21 @@ import { renderRoutesPanel } from '../views/RoutesView.js';
 import { renderSchedulePanel } from '../views/SchedulesView.js';
 import { renderFinancesPanel } from '../views/FinanceView.js';
 import { renderLogPanel } from '../views/LogView.js';
+import { renderRouteDetailView } from '../views/RouteDetailView.js';
+
+export const uiState = {
+    activeView: 'dashboard',
+    activeRouteId: null
+};
+
+export function openRouteDetail(routeId) {
+    uiState.activeView = 'routeDetail';
+    uiState.activeRouteId = routeId;
+    const content = document.getElementById('panel-content');
+    if (content) {
+        renderRouteDetailView(content);
+    }
+}
 
 export function formatLocation(ac) {
     if (!ac.currentLocation) return '';
@@ -17,9 +32,19 @@ export function formatLocation(ac) {
 export function showPanel(panelId) {
     const state = getState();
     if (state) state.ui.selectedPanel = panelId;
+    uiState.activeView = panelId;
+    uiState.activeRouteId = null;
 
     const content = document.getElementById('panel-content');
     if (!content) return;
+
+    // Deselect nav if coming from programmatic source
+    const nav = document.getElementById('side-nav');
+    if (nav) {
+        nav.querySelectorAll('.nav-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.panel === panelId);
+        });
+    }
 
     switch (panelId) {
         case 'dashboard': renderDashboard(content); break;

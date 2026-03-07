@@ -8,7 +8,7 @@ import { getAICompetitorsOnRoute } from '../../engine/aiEngine.js';
 import { getSlotUsageForAirport } from '../../engine/sim.js';
 import { updateHUD } from '../hud.js';
 import { renderMap } from '../map.js';
-import { formatLocation } from '../services/uiState.js';
+import { formatLocation, openRouteDetail } from '../services/uiState.js';
 import { showConfirm, showModal, closeModal } from '../components/Modal.js';
 
 export function renderRoutesPanel(container) {
@@ -91,10 +91,10 @@ function renderAirportsSubPanel() {
         <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:6px;padding:14px;">
             <h3 class="section-title" style="margin-top:0;">Airports (${airportData.length})</h3>
             ${airportData.map(d => {
-                const levelColor = d.level >= 4 ? 'var(--accent-red)' : d.level === 3 ? 'var(--accent-yellow)' : 'var(--accent-green)';
-                const peakUsage = Object.values(d.slotUsage).length > 0 ? Math.max(...Object.values(d.slotUsage)) : 0;
-                const availPct = d.slotsPerHour > 0 ? Math.round((1 - peakUsage / d.slotsPerHour) * 100) : 100;
-                return `
+        const levelColor = d.level >= 4 ? 'var(--accent-red)' : d.level === 3 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+        const peakUsage = Object.values(d.slotUsage).length > 0 ? Math.max(...Object.values(d.slotUsage)) : 0;
+        const availPct = d.slotsPerHour > 0 ? Math.round((1 - peakUsage / d.slotsPerHour) * 100) : 100;
+        return `
                     <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-color);font-size:13px;">
                         <span style="font-family:var(--font-mono);font-weight:700;color:var(--accent-blue);min-width:36px;">${d.iata}</span>
                         <span style="color:${levelColor};font-family:var(--font-mono);font-size:11px;min-width:80px;">L${d.level} ${d.levelInfo.name}</span>
@@ -104,7 +104,7 @@ function renderAirportsSubPanel() {
                         ${d.isHub ? '<span style="color:var(--accent-blue);font-family:var(--font-mono);font-size:10px;background:rgba(0,170,255,0.1);padding:1px 6px;border-radius:3px;">HUB</span>' : ''}
                     </div>
                 `;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 }
@@ -117,7 +117,7 @@ function renderRouteCreator() {
     const aircraftOptions = state.fleet.map(ac => {
         const statusLabel = ac.status === 'available' ? '\u2705 Available'
             : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
-            : '\uD83D\uDFE1 Busy';
+                : '\uD83D\uDFE1 Busy';
         let nextFreeLabel = '';
         if (ac.status === 'in_flight') {
             const nextFree = getAircraftNextFree(ac.id);
@@ -130,7 +130,7 @@ function renderRouteCreator() {
     }).join('');
 
     const bankOptions = state.banks.map(b =>
-        `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2,'0')}:${String(b.startTime.minute).padStart(2,'0')}-${String(b.endTime.hour).padStart(2,'0')}:${String(b.endTime.minute).padStart(2,'0')})</option>`
+        `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2, '0')}:${String(b.startTime.minute).padStart(2, '0')}-${String(b.endTime.hour).padStart(2, '0')}:${String(b.endTime.minute).padStart(2, '0')})</option>`
     ).join('');
 
     creator.innerHTML = `
@@ -406,7 +406,7 @@ function renderRouteCreator() {
         rangeDiv.classList.remove('hidden');
         if (can) {
             rangeDiv.className = 'range-check ok';
-            rangeDiv.textContent = `Range OK (${acData.rangeKm}km \u2265 ${Math.round(distance)}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            rangeDiv.textContent = `Range OK (${acData.rangeKm}km \u2265 ${Math.round(distance)}km). Block: ${Math.floor(blockTime / 60)}h${blockTime % 60}m, Turnaround: ${turnaround}m`;
         } else {
             rangeDiv.className = 'range-check fail';
             rangeDiv.textContent = `Out of range! ${acData.rangeKm}km < ${Math.round(distance)}km`;
@@ -565,7 +565,7 @@ function renderRouteCreator() {
                                 const gap = sorted[i] - sorted[i - 1];
                                 const needed = blockTime + turnaround;
                                 if (gap < needed) {
-                                    errors.push(`Outbound: Insufficient turnaround between departures at ${String(Math.floor(sorted[i-1]/60)).padStart(2,'0')}:${String(sorted[i-1]%60).padStart(2,'0')} and ${String(Math.floor(sorted[i]/60)).padStart(2,'0')}:${String(sorted[i]%60).padStart(2,'0')}.`);
+                                    errors.push(`Outbound: Insufficient turnaround between departures at ${String(Math.floor(sorted[i - 1] / 60)).padStart(2, '0')}:${String(sorted[i - 1] % 60).padStart(2, '0')} and ${String(Math.floor(sorted[i] / 60)).padStart(2, '0')}:${String(sorted[i] % 60).padStart(2, '0')}.`);
                                 }
                             }
                         }
@@ -594,7 +594,7 @@ function renderRouteCreator() {
                                 const gap = sorted[i] - sorted[i - 1];
                                 const needed = blockTime + turnaround;
                                 if (gap < needed) {
-                                    errors.push(`Return: Insufficient turnaround between departures at ${String(Math.floor(sorted[i-1]/60)).padStart(2,'0')}:${String(sorted[i-1]%60).padStart(2,'0')} and ${String(Math.floor(sorted[i]/60)).padStart(2,'0')}:${String(sorted[i]%60).padStart(2,'0')}.`);
+                                    errors.push(`Return: Insufficient turnaround between departures at ${String(Math.floor(sorted[i - 1] / 60)).padStart(2, '0')}:${String(sorted[i - 1] % 60).padStart(2, '0')} and ${String(Math.floor(sorted[i] / 60)).padStart(2, '0')}:${String(sorted[i] % 60).padStart(2, '0')}.`);
                                 }
                             }
                         }
@@ -617,7 +617,7 @@ function renderRouteCreator() {
                         const earliestRetDep = outArr + turnaround;
                         const matchingRet = retSorted.find(r => r >= earliestRetDep);
                         if (!matchingRet && earliestRetDep < 1440) {
-                            errors.push(`Rotation: Outbound dep ${String(Math.floor(outDep/60)).padStart(2,'0')}:${String(outDep%60).padStart(2,'0')} arrives ~${String(Math.floor(outArr/60)%24).padStart(2,'0')}:${String(outArr%60).padStart(2,'0')}, needs ${turnaround}min turnaround. No matching return departure found.`);
+                            errors.push(`Rotation: Outbound dep ${String(Math.floor(outDep / 60)).padStart(2, '0')}:${String(outDep % 60).padStart(2, '0')} arrives ~${String(Math.floor(outArr / 60) % 24).padStart(2, '0')}:${String(outArr % 60).padStart(2, '0')}, needs ${turnaround}min turnaround. No matching return departure found.`);
                             break;
                         }
                     }
@@ -886,12 +886,20 @@ function renderRouteList() {
                 ${minAcWarning}
                 ${strandWarning}
                 <div class="route-card-actions">
+                    <button class="btn-sm btn-accent" data-detail-route="${route.id}">View Details</button>
                     ${assignedAircraft.length > 0 ? `<button class="btn-sm" data-swap-route="${route.id}">Swap Aircraft</button>` : ''}
                     <button class="btn-sm btn-danger" data-delete-route="${route.id}">Delete</button>
                 </div>
             </div>
         `;
     }).join('');
+
+    listDiv.querySelectorAll('[data-detail-route]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.detailRoute);
+            openRouteDetail(id);
+        });
+    });
 
     listDiv.querySelectorAll('[data-delete-route]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -948,7 +956,7 @@ function renderRouteList() {
     });
 }
 
-function openSwapAircraftModal(routeId) {
+export function openSwapAircraftModal(routeId) {
     const state = getState();
     const route = getRouteById(routeId);
     if (!route) return;
