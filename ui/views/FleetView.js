@@ -4,7 +4,7 @@ import { getDistanceBetweenAirports } from '../../data/airports.js';
 import { purchaseAircraft, leaseAircraft, sellAircraft, returnLeasedAircraft, startMaintenance, purchaseUsedAircraft, leaseUsedAircraft } from '../../engine/fleetManager.js';
 import { getSchedulesByAircraft } from '../../engine/scheduler.js';
 import { updateHUD } from '../hud.js';
-import { formatLocation } from '../services/uiState.js';
+import { formatLocation, openAircraftDetail } from '../services/uiState.js';
 import { showConfirm, showModal, closeModal } from '../components/Modal.js';
 import { StatCard } from '../components/StatCard.js';
 import { DataTable } from '../components/DataTable.js';
@@ -195,9 +195,9 @@ function renderFleetList() {
     // Wire up row selection
     listDiv.querySelectorAll('.fleet-row').forEach(row => {
         row.addEventListener('click', (e) => {
-            if (e.target.tagName === 'BUTTON') return; // let buttons handle themselves
+            if (e.target.closest('button')) return; // let buttons handle themselves
             selectedAircraftId = parseInt(row.dataset.acId);
-            renderFleetList(); // re-render to highlight and trigger timeline update
+            openAircraftDetail(selectedAircraftId);
         });
     });
 

@@ -125,6 +125,7 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 ### Session G (UI Modularity & Fleet Operations)
 
 - **Task 4: Network Route Analytics** — Created `NetworkView.js` featuring a data-dense sortable table and summary KPIs tracking route performance via a strict 1440-minute lookback window across `state.flights.completed` and `state.schedules`. Surfaces derived 'Est. Spill' and exact load factors per route natively, bridging navigation flows seamlessly to `RouteDetailView`. All KPIs and Timeline render clean empty-states cleanly, natively resolving layout edges without mutating engine flow.
+- **Task 5: Aircraft Detail View** — Created `AircraftDetailView.js` featuring a 1440-minute lookback for aircraft-specific analytics (Flights, Utilization, Revenue, Profit, Transfers), a robust Gantt-style 24-hour visual timeline matching Fleet structure but scaled for single focus, an aircraft-specific daily flight schedule assignment table, dynamic maintenance profile metrics mapping exact engine thresholds, and actionable header controls (`Sell Aircraft`, `Perform Maintenance`, `Back to Fleet`). Connected via `uiState.js` and Fleet Operations table row clicks natively using event delegation.
 
 ### Phase 3 Roadmap
 

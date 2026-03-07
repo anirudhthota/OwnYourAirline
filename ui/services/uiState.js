@@ -7,16 +7,24 @@ import { renderFinancesPanel } from '../views/FinanceView.js';
 import { renderLogPanel } from '../views/LogView.js';
 import { renderRouteDetailView } from '../views/RouteDetailView.js';
 import { renderNetworkView } from '../views/NetworkView.js';
+import { renderAircraftDetailView } from '../views/AircraftDetailView.js';
 
 export const uiState = {
     activeView: 'dashboard',
-    activeRouteId: null
+    activeRouteId: null,
+    activeAircraftId: null
 };
 
 export function openRouteDetail(routeId) {
     uiState.activeRouteId = routeId;
     uiState.activeView = 'routeDetail';
     showPanel('routeDetail');
+}
+
+export function openAircraftDetail(aircraftId) {
+    uiState.activeAircraftId = aircraftId;
+    uiState.activeView = 'aircraftDetail';
+    showPanel('aircraftDetail');
 }
 
 export function formatLocation(ac) {
@@ -55,5 +63,6 @@ export function showPanel(panelId) {
         case 'schedule': renderSchedulePanel(content); break;
         case 'finances': renderFinancesPanel(content); break;
         case 'log': renderLogPanel(content); break;
+        case 'aircraftDetail': renderAircraftDetailView(content); break;
     }
 }
