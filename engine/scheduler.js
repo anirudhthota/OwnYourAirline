@@ -1,6 +1,6 @@
 import { getState, addLogEntry, getGameTime } from './state.js';
 import { getRouteById, calculateBlockTime, canAircraftFlyRoute } from './routeEngine.js';
-import { getAircraftByType, getTurnaroundTime, calculateMinAircraft as calcMinAc } from '../data/aircraft.js';
+import { getAircraftByType, getTurnaroundTime } from '../data/aircraft.js';
 import { validateAircraftRotationChain, getAircraftNextOperationalLocation } from './rotationEngine.js';
 
 export const SCHEDULE_MODE = {

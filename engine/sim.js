@@ -38,6 +38,7 @@ export function tick() {
     state.clock.totalTicks++;
 
     processDelayedFlights();
+    processMaintenanceRelease();
     processFlightDepartures();
     processActiveFlights();
     processSlotUsage();
@@ -95,6 +96,17 @@ function processDelayedFlights() {
     }
 
     state.delayedFlights = stillDelayed;
+}
+
+function processMaintenanceRelease() {
+    const state = getState();
+    for (const ac of state.fleet) {
+        if (ac.status === 'maintenance' && ac.maintenanceReleaseTime && state.clock.totalMinutes >= ac.maintenanceReleaseTime) {
+            ac.status = 'available';
+            ac.maintenanceReleaseTime = null;
+            addLogEntry(`${ac.registration} maintenance complete — returned to service at ${ac.currentLocation}.`, 'fleet');
+        }
+    }
 }
 
 function processFlightDepartures() {
