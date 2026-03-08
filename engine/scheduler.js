@@ -173,7 +173,7 @@ export function updateScheduleDepartures(scheduleId, newTimes) {
     return true;
 }
 
-export function validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, excludeScheduleId) {
+export function validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, excludeScheduleId, assumedStartLocation = null) {
     const state = getState();
     const errors = [];
 
@@ -241,7 +241,7 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
         // Check the earliest departure — that's where the aircraft needs to be
         const earliestTime = times[0];
         const earliestDepMin = earliestTime.hour * 60 + earliestTime.minute;
-        const projectedLoc = getProjectedLocation(aircraftId, earliestDepMin, excludeScheduleId);
+        const projectedLoc = assumedStartLocation || getProjectedLocation(aircraftId, earliestDepMin, excludeScheduleId);
         if (projectedLoc && projectedLoc !== route.origin && projectedLoc !== 'airborne') {
             errors.push(`${aircraft.registration} will be at ${projectedLoc} at ${String(earliestTime.hour).padStart(2, '0')}:${String(earliestTime.minute).padStart(2, '0')} — cannot depart ${route.origin}`);
         } else if (projectedLoc === 'airborne') {
@@ -298,13 +298,13 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
                 for (const exTime of existing.departureTimes) {
                     const exDepMin = exTime.hour * 60 + exTime.minute;
                     const exReturnMin = exDepMin + existing.blockTimeMinutes + turnaround;
-                    
+
                     const intervalsA = [
                         { start: newDepMin, end: newReturnMin },
                         { start: newDepMin + 1440, end: newReturnMin + 1440 },
                         { start: newDepMin - 1440, end: newReturnMin - 1440 }
                     ];
-                    
+
                     let overlap = false;
                     for (const intA of intervalsA) {
                         if (intA.start < exReturnMin && exDepMin < intA.end) {
@@ -460,7 +460,7 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
     // Swap ALL active schedules for the old aircraft, not just the single route,
     // to maintain a sane daily flight plan and prevent stranded aircraft.
     const affectedSchedules = state.schedules.filter(s => s.aircraftId === oldAircraftId && s.active);
-    
+
     if (affectedSchedules.length === 0) {
         return { success: false, errors: ['No schedules found for this aircraft to swap'] };
     }
@@ -486,7 +486,7 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
     // Location check: new aircraft must be at the origin of the FIRST flight of the day
     let earliestDepMin = Infinity;
     let earliestRouteOrigin = null;
-    
+
     for (const sched of affectedSchedules) {
         const schedRoute = getRouteById(sched.routeId);
         if (!schedRoute) continue;
@@ -516,7 +516,7 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
         const schedRoute = getRouteById(sched.routeId);
         if (!schedRoute) continue;
         const newBlockTime = calculateBlockTime(schedRoute.distance, newAc.type);
-        
+
         if (sched.departureTimes.length > 1) {
             const sortedMinutes = sched.departureTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
             for (let i = 1; i < sortedMinutes.length; i++) {
@@ -533,28 +533,28 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
             }
         }
     }
-    
+
     // Scheduling Conflict: Does newAc already have schedules that overlap with the ones it is inheriting?
     const existingScheds = state.schedules.filter(s => s.aircraftId === newAircraftId && s.active);
     for (const existing of existingScheds) {
         for (const incomingSched of affectedSchedules) {
             const incomingRoute = getRouteById(incomingSched.routeId);
             const newBlockTime = calculateBlockTime(incomingRoute.distance, newAc.type);
-            
+
             for (const newTime of incomingSched.departureTimes) {
                 const newDepMin = newTime.hour * 60 + newTime.minute;
                 const newReturnMin = newDepMin + newBlockTime;
-                
+
                 for (const exTime of existing.departureTimes) {
                     const exDepMin = exTime.hour * 60 + exTime.minute;
                     const exReturnMin = exDepMin + existing.blockTimeMinutes;
-                    
+
                     const intervalsA = [
                         { start: newDepMin, end: newReturnMin },
                         { start: newDepMin + 1440, end: newReturnMin + 1440 },
                         { start: newDepMin - 1440, end: newReturnMin - 1440 }
                     ];
-                    
+
                     let overlap = false;
                     for (const intA of intervalsA) {
                         if (intA.start < exReturnMin && exDepMin < intA.end) {

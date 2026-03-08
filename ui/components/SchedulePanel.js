@@ -1,6 +1,7 @@
 import { getState, getGameTime, formatMoney } from '../../engine/state.js';
 import { getRouteById, calculateBlockTime, canAircraftFlyRoute, calculateRouteDemand } from '../../engine/routeEngine.js';
 import { getAircraftByType, getTurnaroundTime } from '../../data/aircraft.js';
+import { getAirportByIata } from '../../data/airports.js';
 import { getAircraftNextFree } from '../../engine/fleetManager.js';
 import { createSchedule, updateSchedule, deleteSchedule, generateFlightNumbers, validateScheduleParams, calculateMinAircraft } from '../../engine/scheduler.js';
 import { showModal, closeModal } from './Modal.js';
@@ -96,13 +97,16 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
                     
                     <div class="form-row-inline" style="display:flex; gap:16px; align-items:flex-end;">
                         <div style="flex:1;">
-                            <label id="sp-lbl-out" style="font-size:11px; color:var(--text-muted); margin-bottom:4px; display:block; text-transform: uppercase;">${hasReturn ? 'Outbound' : 'Departure'}</label>
-                            <input type="time" id="sp-new-time-out" value="08:00" style="width: 100%; border: 1px solid var(--border-color);" />
+                            <label id="sp-lbl-out" style="font-size:11px; color:var(--text-muted); margin-bottom:4px; display:block; text-transform: uppercase;">${hasReturn ? 'Outbound Departure' : 'Departure'}</label>
+                            <input type="time" id="sp-new-time-out" value="08:00" data-edited="false" data-auto="false" style="width: 100%; border: 1px solid var(--border-color);" />
                         </div>
                         ${hasReturn ? `
                         <div style="flex:1;" id="sp-ret-container">
-                            <label id="sp-lbl-ret" style="font-size:11px; color:var(--text-muted); margin-bottom:4px; display:block; text-transform: uppercase;">Return <span style="color:var(--accent-blue)">(Auto)</span></label>
-                            <input type="time" id="sp-new-time-ret" style="width: 100%; border: 1px solid var(--border-color);" />
+                            <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:4px;">
+                                <label id="sp-lbl-ret" style="font-size:11px; color:var(--text-muted); margin:0; display:block; text-transform: uppercase;">Return Departure <span style="color:var(--accent-blue)">(Auto)</span></label>
+                                <button id="sp-reset-auto" class="btn-text hidden" style="font-size:10px; padding:0; height:auto; color:var(--accent-blue); border:none; background:none; cursor:pointer;">Reset to Auto</button>
+                            </div>
+                            <input type="time" id="sp-new-time-ret" data-edited="false" data-auto="true" style="width: 100%; border: 1px solid var(--border-color);" />
                         </div>
                         ` : ''}
                         <button class="btn-accent" id="sp-add-time">Add Time${hasReturn ? ' Pair' : ''}</button>
@@ -121,8 +125,12 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
                 <!-- Pricing Preview Panel -->
                 <div class="form-row" style="margin-top: 24px; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-card);">
                     <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                        <label style="font-weight: bold; margin: 0;">Fare Multiplier Strategy</label>
-                        <span id="sp-fare-val" style="font-family: var(--font-mono); font-size: 14px; font-weight: bold; color: var(--accent-blue);">${multiplier.toFixed(2)}x</span>
+                        <label style="font-weight: bold; margin: 0;">Pricing Setup</label>
+                    </div>
+
+                    <div style="display:flex; justify-content: space-between; margin-bottom: 8px; font-size:12px;">
+                        <span>Base Fare: <strong>$${Math.round(route.baseFare)}</strong></span>
+                        <span>Multiplier: <strong id="sp-fare-val" style="color:var(--accent-blue);">${multiplier.toFixed(2)}x</strong></span>
                     </div>
                     <input type="range" id="sp-fare-slider" min="0.6" max="1.6" step="0.01" value="${multiplier}" style="width: 100%; cursor: pointer;">
                     
@@ -176,17 +184,28 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
         });
 
         outInput.addEventListener('input', () => {
+            outInput.dataset.edited = "true";
             outInput.dataset.auto = "false";
-            container.querySelector('#sp-lbl-out').textContent = hasReturn ? 'Outbound' : 'Departure';
+            container.querySelector('#sp-lbl-out').textContent = hasReturn ? 'Outbound Departure' : 'Departure';
             updateAutoCalc('out');
         });
 
         if (retInput) {
+            const resetBtn = container.querySelector('#sp-reset-auto');
             retInput.addEventListener('input', () => {
                 retInput.dataset.auto = "false";
-                container.querySelector('#sp-lbl-ret').innerHTML = 'Return <span style="color:var(--accent-yellow)">(Manual Override)</span>';
+                container.querySelector('#sp-lbl-ret').innerHTML = 'Return Departure <span style="color:var(--accent-yellow)">(Manual Override)</span>';
+                if (resetBtn) resetBtn.classList.remove('hidden');
                 updateAutoCalc('ret');
             });
+
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    retInput.dataset.auto = "true";
+                    resetBtn.classList.add('hidden');
+                    updateAutoCalc('out');
+                });
+            }
         }
 
         container.querySelector('#sp-add-time').addEventListener('click', () => {
@@ -306,15 +325,18 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
         const lblOut = container.querySelector('#sp-lbl-out');
         const lblRet = container.querySelector('#sp-lbl-ret');
 
-        let hintHtml = `Block: ${Math.floor(blockTime / 60)}h${blockTime % 60}m | Turnaround: ${turnaround}m`;
+        let hintHtml = `Block Time: ${Math.floor(blockTime / 60)}h${blockTime % 60}m | Turnaround: ${turnaround}m`;
 
         if (!hasReturn) {
             calcHint.innerHTML = hintHtml;
             return;
         }
 
+        hintHtml += ` | Route: ${route.origin} → ${route.destination} → ${route.origin}`;
+
         let outVal = outInput.value;
         let retVal = retInput.value;
+        const resetBtn = container.querySelector('#sp-reset-auto');
 
         if (source === 'out' && outVal) {
             outInput.dataset.edited = "true";
@@ -325,22 +347,29 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
                 retInput.value = `${String(Math.floor(retMins / 60)).padStart(2, '0')}:${String(retMins % 60).padStart(2, '0')}`;
                 retInput.dataset.auto = "true";
 
-                lblRet.innerHTML = `Return <span style="color:var(--accent-blue)">(Auto)</span>`;
-                if (rawMins + legDuration >= 1440) hintHtml += ` <span style="color:var(--accent-yellow)">(Arrival +1 Day)</span>`;
+                lblRet.innerHTML = `Return Departure <span style="color:var(--accent-blue)">(Auto)</span>`;
+                if (resetBtn) resetBtn.classList.add('hidden');
+
+                const returnArrMins = rawMins + legDuration * 2;
+                if (returnArrMins >= 2880) hintHtml += ` <span style="color:var(--accent-yellow)">(Return Arrival +2 Days)</span>`;
+                else if (returnArrMins >= 1440) hintHtml += ` <span style="color:var(--accent-yellow)">(Return Arrival +1 Day)</span>`;
+                else hintHtml += ` <span style="color:var(--text-muted)">(Aircraft arrives ${route.origin} at ${String(Math.floor(returnArrMins / 60) % 24).padStart(2, '0')}:${String(returnArrMins % 60).padStart(2, '0')})</span>`;
             }
         } else if (source === 'ret' && retVal) {
             retInput.dataset.edited = "true";
             retInput.dataset.auto = "false";
-            lblRet.innerHTML = `Return <span style="color:var(--accent-yellow)">(Manual Override)</span>`;
+            lblRet.innerHTML = `Return Departure <span style="color:var(--accent-yellow)">(Manual Override)</span>`;
+            if (resetBtn) resetBtn.classList.remove('hidden');
 
-            if (!outVal || outInput.dataset.auto === "true") {
+            if (!outVal || outInput.dataset.auto === "true" || outInput.dataset.edited !== "true") {
                 const [h, m] = retVal.split(':').map(Number);
                 const rawMins = h * 60 + m;
                 const outMins = (rawMins - legDuration + 1440) % 1440;
                 outInput.value = `${String(Math.floor(outMins / 60)).padStart(2, '0')}:${String(outMins % 60).padStart(2, '0')}`;
                 outInput.dataset.auto = "true";
 
-                lblOut.innerHTML = `Outbound <span style="color:var(--accent-blue)">(Auto)</span>`;
+                lblOut.innerHTML = `Outbound Departure <span style="color:var(--accent-blue)">(Auto)</span>`;
+                hintHtml += ` <span style="color:var(--text-muted)">(Outbound back-calculated)</span>`;
                 if (rawMins - legDuration < 0) hintHtml += ` <span style="color:var(--accent-yellow)">(Outbound -1 Day)</span>`;
             }
         }
@@ -456,7 +485,7 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
 
         let errors = validateScheduleParams(route.id, aircraftId, 'CUSTOM', currentOutTimes, null, mode === 'edit' ? scheduleId : null);
         if (hasReturn && currentRetTimes.length > 0) {
-            const retErrors = validateScheduleParams(pairedRoute.id, aircraftId, 'CUSTOM', currentRetTimes, null, mode === 'edit' && returnSchedule ? returnSchedule.id : null);
+            const retErrors = validateScheduleParams(pairedRoute.id, aircraftId, 'CUSTOM', currentRetTimes, null, mode === 'edit' && returnSchedule ? returnSchedule.id : null, route.destination);
             errors = errors.concat(retErrors);
         }
 

@@ -132,6 +132,13 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - **Task 5: Aircraft Detail View** — Created `AircraftDetailView.js` featuring a 1440-minute lookback for aircraft-specific analytics (Flights, Utilization, Revenue, Profit, Transfers), a robust Gantt-style 24-hour visual timeline matching Fleet structure but scaled for single focus, an aircraft-specific daily flight schedule assignment table, dynamic maintenance profile metrics mapping exact engine thresholds, and actionable header controls (`Sell Aircraft`, `Perform Maintenance`, `Back to Fleet`). Connected via `uiState.js` and Fleet Operations table row clicks natively using event delegation.
 - **Task 6: Hub Operations View** — Created `HubOperationsView.js` offering a centralized dashboard for Primary Hub performance. Includes 1440-minute aggregation for Arrivals/Departures, a visually stacked 24-hour timeline revealing schedule banks/waves per hour block via `schedules` math computation, a data-dense Connection Performance Table iterating raw `state.transfers.flowRates`, and a dynamic Route Role logic classifier mapping hub-bound route efficiency based on transfer densities and capacities natively. Connected safely to `AppShell` and `uiState` navigation mapping.
 
+### Session H (Scheduling UI Polish)
+
+- **Task 1: Auto-Calculation Restoration** — Added UI state capability to restore "Auto" calculation mode on bidirectional returns once the user falls back into manual override mode inside `SchedulePanel.js`.
+- **Task 2: Reverse Back-Calculation** — Enhanced return-first input handling to accurately back-calculate the outbound time natively supporting ±1 day rollovers recursively.
+- **Task 3: Return-Leg Physical Validation** — Patched `validateScheduleParams` to accept an `assumedStartLocation` parameter natively allowing bidirectional validation to project aircraft location exactly at the outbound destination prior to return flight departure.
+- **Task 4: Fare Slider Live Preview** — Wired the custom pricing slider tightly to engine elasticity algorithms projecting Ticket Price, Demand, Load Factor, and Revenue live without requiring route confirmation.
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs
