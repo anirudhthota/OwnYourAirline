@@ -237,6 +237,9 @@ export function getAircraftRotationTimelineBlocks(aircraftId, dayOffset = 0) {
         return blocks;
     }
 
+    // Build activity blocks, then fill idle gaps
+    const activityBlocks = [];
+
     chain.forEach(leg => {
         const depAbs = leg.depMinute;
         const arrAbs = leg.arrMinute;
@@ -244,13 +247,29 @@ export function getAircraftRotationTimelineBlocks(aircraftId, dayOffset = 0) {
         const fltLabel = `${leg.origin}\u2192${leg.destination}`;
 
         // Flight
-        blocks.push({ type: 'flight', start: depAbs, end: arrAbs, label: fltLabel, color: 'var(--color-info,#3b82f6)' });
-        if (arrAbs > 1440) blocks.push({ type: 'flight', start: depAbs - 1440, end: arrAbs - 1440, label: fltLabel, color: 'var(--color-info,#3b82f6)' });
+        activityBlocks.push({ type: 'flight', start: depAbs, end: arrAbs, label: fltLabel, color: 'var(--color-info,#3b82f6)' });
 
         // Turnaround
-        blocks.push({ type: 'turnaround', start: arrAbs, end: turnEndAbs, label: 'TURN', color: 'var(--color-warning,#f59e0b)' });
-        if (turnEndAbs > 1440) blocks.push({ type: 'turnaround', start: arrAbs - 1440, end: turnEndAbs - 1440, label: 'TURN', color: 'var(--color-warning,#f59e0b)' });
+        activityBlocks.push({ type: 'turnaround', start: arrAbs, end: turnEndAbs, label: 'TURN', color: 'var(--color-warning,#f59e0b)' });
     });
+
+    // Sort by start time and clamp to 0-1440 window
+    activityBlocks.sort((a, b) => a.start - b.start);
+
+    // Fill idle gaps
+    let cursor = 0;
+    for (const blk of activityBlocks) {
+        const clampedStart = Math.max(0, blk.start);
+        if (clampedStart > cursor) {
+            blocks.push({ type: 'idle', start: cursor, end: clampedStart, label: 'IDLE', color: 'var(--bg-surface-highlight)' });
+        }
+        blocks.push(blk);
+        cursor = Math.max(cursor, Math.min(1440, blk.end));
+    }
+    // Trailing idle
+    if (cursor < 1440) {
+        blocks.push({ type: 'idle', start: cursor, end: 1440, label: 'IDLE', color: 'var(--bg-surface-highlight)' });
+    }
 
     return blocks;
 }

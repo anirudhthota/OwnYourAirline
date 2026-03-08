@@ -6,11 +6,11 @@ import { StatCard } from '../components/StatCard.js';
 export function renderDashboard(container) {
     const state = getState();
     const hub = getAirportByIata(state.config.hubAirport);
-    
+
     const MINUTES_PER_DAY = 1440;
     const startOfDay = state.clock.totalMinutes - (state.clock.totalMinutes % MINUTES_PER_DAY);
-    const todayFlights = state.flights.completed.filter(f => f.completionTime >= startOfDay);
-    
+    const todayFlights = state.flights.completed.filter(f => f.arrivalTime >= startOfDay);
+
     // 1. Airline Status Bar
     const cash = state.finances.cash;
     let todayRevenue = 0;
@@ -18,7 +18,7 @@ export function renderDashboard(container) {
     let passengersToday = 0;
     let sumLoadFactor = 0;
     let transferPassengersToday = 0;
-    
+
     const routeProfits = {};
 
     todayFlights.forEach(f => {
@@ -27,7 +27,7 @@ export function renderDashboard(container) {
         passengersToday += f.passengers;
         sumLoadFactor += f.loadFactor;
         transferPassengersToday += (f.transferPassengers || 0);
-        
+
         routeProfits[f.routeId] = (routeProfits[f.routeId] || 0) + f.profit;
     });
 
@@ -35,13 +35,13 @@ export function renderDashboard(container) {
     const fleetSize = state.fleet.length;
     const activeRoutes = state.routes.filter(r => r.active).length;
     const avgLoadFactor = todayFlights.length > 0 ? (sumLoadFactor / todayFlights.length) * 100 : 0;
-    
+
     // 2. Financial Snapshot
     const avgTicketYield = passengersToday > 0 ? (todayRevenue / passengersToday) : 0;
-    
+
     // 3. Operations Health
     const flightsToday = todayFlights.length + state.flights.active.length;
-    const delayedFlights = 0; 
+    const delayedFlights = (state.delayedFlights && state.delayedFlights.length) || 0;
     const aircraftInMaintenance = state.fleet.filter(ac => ac.status === 'maintenance').length;
     const aircraftMaintenanceDue = state.fleet.filter(ac => ac.status === 'maintenance_due').length;
     const scheduleConflicts = state.log.filter(l => l.type === 'error' && l.timestamp >= startOfDay).length;
@@ -51,12 +51,12 @@ export function renderDashboard(container) {
     let maxProfit = -Infinity;
     let worstRouteId = null;
     let minProfit = Infinity;
-    
+
     for (const rid in routeProfits) {
         if (routeProfits[rid] > maxProfit) { maxProfit = routeProfits[rid]; topRouteId = rid; }
         if (routeProfits[rid] < minProfit) { minProfit = routeProfits[rid]; worstRouteId = rid; }
     }
-    
+
     if (todayFlights.length === 0 && state.flights.completed.length > 0) {
         state.flights.completed.forEach(f => {
             routeProfits[f.routeId] = (routeProfits[f.routeId] || 0) + f.profit;
@@ -71,7 +71,7 @@ export function renderDashboard(container) {
         const r = getRouteById(parseInt(topRouteId));
         return r ? `${r.origin} \u2192 ${r.destination}` : 'None';
     })() : 'None';
-    
+
     const worstRouteRender = worstRouteId ? (() => {
         const r = getRouteById(parseInt(worstRouteId));
         return r ? `${r.origin} \u2192 ${r.destination}` : 'None';
@@ -81,13 +81,13 @@ export function renderDashboard(container) {
 
     // 5. Alerts & Events
     const recentAlerts = state.log.filter(l => l.type === 'error' || l.type === 'warning').slice(-5).reverse();
-    
+
     const formatLogTime = (totalMinutes) => {
         const w = Math.floor(totalMinutes / (1440 * 7)) + 1;
         const d = Math.floor((totalMinutes % (1440 * 7)) / 1440) + 1;
         const hh = Math.floor((totalMinutes % 1440) / 60);
         const mm = Math.floor(totalMinutes % 60);
-        return `W${w}-D${d} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+        return `W${w}-D${d} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     };
 
     container.innerHTML = `

@@ -234,6 +234,9 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
 
             updateTimesListDOM();
             refreshFlightNumbersDOM();
+            // Re-derive fare preview with updated time count
+            const curSlider = container.querySelector('#sp-fare-slider');
+            if (curSlider) updateFarePreview(parseFloat(curSlider.value));
         });
 
         const slider = container.querySelector('#sp-fare-slider');
@@ -244,10 +247,8 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
             updateFarePreview(val);
         });
 
-        slider.addEventListener('change', (e) => {
-            route.fareMultiplier = parseFloat(e.target.value);
-            if (pairedRoute) pairedRoute.fareMultiplier = parseFloat(e.target.value);
-        });
+        // fareMultiplier is committed in onConfirmClick, not on slider drag,
+        // so cancelling the panel doesn't permanently change the fare.
 
         container.querySelector('#sp-confirm').addEventListener('click', onConfirmClick);
         if (mode === 'edit') {
@@ -508,6 +509,11 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
             errDiv.innerHTML = errors.map(e => `<div class="validation-error-item">${e}</div>`).join('');
             return;
         }
+
+        // Commit fare multiplier on confirm only
+        const finalFare = parseFloat(container.querySelector('#sp-fare-slider').value);
+        route.fareMultiplier = finalFare;
+        if (pairedRoute) pairedRoute.fareMultiplier = finalFare;
 
         if (mode === 'edit') {
             updateSchedule(scheduleId, route.id, aircraftId, 'CUSTOM', currentOutTimes, null, currentOutFns);

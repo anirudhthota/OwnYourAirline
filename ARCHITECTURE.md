@@ -144,7 +144,7 @@ engine/ files              ui/ files
     baseFare: 580,                  // $ per pax
     createdDate: 360,               // totalMinutes
     slotCostPaid: 500000,           // one-time fee paid
-    fareMultiplier: 1.0             // Price multiplier affecting demand elasticity (0.75-1.50)
+    fareMultiplier: 1.0             // Price multiplier affecting demand elasticity (0.75-1.50). Migrated to 1.0 for older saves.
 }
 ```
 
@@ -168,7 +168,7 @@ Exported from `data/aircraft.js`:
     purchasePrice: 129000000,       // 0 if free (Sandbox starter)
     purchaseDate: 360,
     totalFlightHours: 0,
-    status: "available",            // available | in_flight | maintenance
+    status: "available",            // available | in_flight | maintenance | maintenance_due
     registration: "XX-001",
     // Leased only:
     leaseCostPerMonth: 850000,
@@ -288,6 +288,7 @@ setInterval (speed-dependent: 50ms to 1000ms)
     → tick() in sim.js
         → state.clock.totalMinutes += 5
         → processDelayedFlights()     — retry delayed flights
+        → processMaintenanceRelease() — release aircraft whose maintenance timer has expired
         → processFlightDepartures()   — match schedules to current time, check slots, launch flights
         → processActiveFlights()      — update progress, complete arrivals, add revenue
         → processSlotUsage()          — clean expired slot hour entries

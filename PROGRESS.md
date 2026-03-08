@@ -145,6 +145,19 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - **Task 2: Engine Integration** — Integrated `validateAircraftRotationChain` into `scheduler.js`'s `validateScheduleParams` and `swapAircraftOnRoute`. Ensures physical location continuity, turnaround limits, and maintenance constraints across discrete routed legs.
 - **Task 3: UI Iteration** — Updated `FleetView.js` and `AircraftDetailView.js` to natively digest abstract rotation chains into 24-hour visual timelines reflecting continuous sequence operations. Updated `SchedulePanel.js` to evaluate schedule proposals explicitly against sequential aircraft locations dynamically.
 
+### Stabilization Sprint (Post-Audit)
+
+- **Fix 1: Maintenance Release Bug** — Added `processMaintenanceRelease()` to `sim.js` tick loop. Aircraft in `'maintenance'` status with expired `maintenanceReleaseTime` are now set back to `'available'`. Without this fix, aircraft were permanently grounded once entering maintenance.
+- **Fix 2: Dashboard KPI Bug** — `DashboardView.js` filtered completed flights by `f.completionTime` which doesn't exist on flight objects. Changed to `f.arrivalTime`. All dashboard KPIs (passengers, revenue, load factor, etc.) were showing zero.
+- **Fix 3: HubOps Block Time Bug** — `HubOperationsView.js` passed `acData.id` (undefined) to `calculateBlockTime()`. Changed to pass `ac.type`. Hub timeline activity chart was computing zero-duration flights.
+- **Fix 4: Scheduler Import Regression** — `scheduler.js` imported non-existent `calculateMinAircraft` from `data/aircraft.js`. The function is defined locally in `scheduler.js`. Removed the dead import that caused `SyntaxError` and blank-screen crash on startup.
+
+- **Fix 5: Fare Slider Live Preview** — `SchedulePanel.js` now re-calls `updateFarePreview` when departure times are added, so load factor and revenue update live. Also moved `fareMultiplier` state commit from slider drag to confirm click — cancelling no longer permanently changes fares.
+- **Fix 6: fareMultiplier Save Migration** — `init.js` now patches `fareMultiplier = 1.0` on legacy routes that lack the field.
+- **Fix 7: AircraftDetailView Grace Hours Field** — Changed `ac.maintenanceGraceHours` (non-existent) to `ac.graceHoursRemaining` (canonical field) with `.toFixed(1)` formatting.
+- **Fix 8: Dashboard Delayed Flights** — Changed hardcoded `delayedFlights = 0` to `state.delayedFlights.length`.
+- **Fix 9: Rotation Timeline Idle Gaps** — `rotationEngine.js` now fills gaps between flight/turnaround blocks with explicit `idle` blocks, giving full 24h coverage with tooltips.
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs
@@ -186,7 +199,7 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 ### Known Issues
 
 1. **AI competition is shallow** — `getAICompetitorsOnRoute` counts but doesn't meaningfully affect demand yet.
-2. **No maintenance system** — Aircraft never need maintenance, no downtime.
+2. ~~**No maintenance system**~~ — **RESOLVED.** Maintenance V1 implemented with A/B/C checks, grace periods, forced grounding, and release timer.
 3. **No touch support** — Leaflet handles touch for map, but other UI elements are mouse-only.
 4. **Save compatibility** — Saves from Phase 1 may not load correctly. Start new game recommended. Phase 2 saves patched for currentLocation, pairedRouteId, and flightNumbers.
 5. **Delay cascade limited** — Delays propagate to next rotation but don't cascade through full day's schedule.

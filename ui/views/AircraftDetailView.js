@@ -275,7 +275,7 @@ export function renderAircraftDetailView(container) {
             <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
                 <div><div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Current State</div><div style="font-weight:600; font-size:14px;">${maintenanceStatus}</div></div>
                 <div><div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Pending Check</div><div style="font-weight:600; font-size:14px;">${ac.pendingCheckType || 'None'}</div></div>
-                <div><div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Grace Hours</div><div style="font-weight:600; font-size:14px;">${ac.maintenanceGraceHours > 0 ? ac.maintenanceGraceHours : '0'}h</div></div>
+                <div><div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Grace Hours</div><div style="font-weight:600; font-size:14px;">${ac.graceHoursRemaining > 0 ? ac.graceHoursRemaining.toFixed(1) : '0'}h</div></div>
                 <div><div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Release Time</div><div style="font-weight:600; font-size:14px;">${maintReleaseStr}</div></div>
             </div>
             <hr style="border:0; border-top:1px solid var(--border-color); margin: 16px 0;">

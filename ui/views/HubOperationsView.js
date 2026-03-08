@@ -63,11 +63,15 @@ export function renderHubOperationsView(container) {
         if (!route) return;
 
         let acData = null;
+        let acType = 'A320'; // fallback
         if (s.aircraftId) {
             const ac = state.fleet.find(f => f.id === s.aircraftId);
-            if (ac) acData = getAircraftByType(ac.type);
+            if (ac) {
+                acData = getAircraftByType(ac.type);
+                acType = ac.type;
+            }
         }
-        const blockTime = acData ? calculateBlockTime(route.distance, acData.id) : calculateBlockTime(route.distance, 'A320'); // fallback
+        const blockTime = calculateBlockTime(route.distance, acType);
         const turnaround = s.turnaroundMinutes;
 
         s.departureTimes.forEach(t => {

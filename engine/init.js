@@ -41,6 +41,10 @@ export function initFromSave() {
             route.pairedRouteId = null;
         }
     }
+    // Ensure fareMultiplier exists for older saves
+    for (const route of state.routes) {
+        if (route.fareMultiplier === undefined) route.fareMultiplier = 1.0;
+    }
     // Ensure maintenance fields exist for older saves
     for (const ac of state.fleet) {
         if (ac.hoursSinceACheck === undefined) ac.hoursSinceACheck = 0;
