@@ -103,8 +103,6 @@ export function renderHubOperationsView(container) {
     const peakGroundAircraft = Math.max(...minuteGroundCount, 0);
 
     // --- Header ---
-    window._hubOpsBack = () => { showPanel('dashboard'); };
-    window._hubOpsRefresh = () => { renderHubOperationsView(container); };
 
     const headerHtml = `
         <div class="panel-header" style="align-items: flex-start;">
@@ -120,8 +118,8 @@ export function renderHubOperationsView(container) {
                 </div>
             </div>
             <div style="display: flex; gap: 8px;">
-                <button class="btn-sm btn-accent" onclick="window._hubOpsRefresh()">Refresh View</button>
-                <button class="btn-sm" onclick="window._hubOpsBack()">Back to Dashboard</button>
+                <button class="btn-sm btn-accent" data-action="refresh">Refresh View</button>
+                <button class="btn-sm" data-action="back">Back to Dashboard</button>
             </div>
         </div>
     `;
@@ -336,6 +334,13 @@ export function renderHubOperationsView(container) {
         ${roleTableHtml}
         ${bottomSectionsHtml}
     `;
+
+    // Event delegation for action buttons
+    container.addEventListener('click', (e) => {
+        const action = e.target.dataset?.action;
+        if (action === 'back') showPanel('dashboard');
+        else if (action === 'refresh') renderHubOperationsView(container);
+    });
 
     // Wire up row clicks to Route Detail View protecting sort buttons
     const roleTable = container.querySelector('#hub-role-table-container');

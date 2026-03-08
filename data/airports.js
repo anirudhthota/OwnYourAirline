@@ -281,8 +281,14 @@ export const AIRPORTS = [
     { iata: 'GUM', name: 'Antonio B. Won Pat International Airport', city: 'Hagåtña', country: 'Guam', lat: 13.4834, lon: 144.7959, slotsPerHour: 12, region: REGIONS.PACIFIC }
 ];
 
+// === O(1) Airport Index ===
+const AIRPORT_INDEX = new Map();
+for (const ap of AIRPORTS) {
+    AIRPORT_INDEX.set(ap.iata, ap);
+}
+
 export function getAirportByIata(iata) {
-    return AIRPORTS.find(a => a.iata === iata) || null;
+    return AIRPORT_INDEX.get(iata) || null;
 }
 
 export function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -296,11 +302,19 @@ export function haversineDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+// === Distance Cache ===
+const _distCache = new Map();
+
 export function getDistanceBetweenAirports(iata1, iata2) {
+    const key = iata1 < iata2 ? `${iata1}-${iata2}` : `${iata2}-${iata1}`;
+    if (_distCache.has(key)) return _distCache.get(key);
+
     const a1 = getAirportByIata(iata1);
     const a2 = getAirportByIata(iata2);
     if (!a1 || !a2) return null;
-    return haversineDistance(a1.lat, a1.lon, a2.lat, a2.lon);
+    const dist = haversineDistance(a1.lat, a1.lon, a2.lat, a2.lon);
+    _distCache.set(key, dist);
+    return dist;
 }
 
 export const SLOT_CONTROL_LEVELS = {

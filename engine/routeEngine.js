@@ -1,6 +1,7 @@
 import { getState, addLogEntry, deductCash, addCash, formatMoney } from './state.js';
 import { getAirportByIata, getDistanceBetweenAirports, getSlotControlLevel, getSlotCost } from '../data/airports.js';
 import { getAircraftByType, FUEL_COST_PER_KG, CREW_COST_PER_FLIGHT_HOUR, AIRPORT_FEE_PER_DEPARTURE, AIRPORT_FEE_PER_ARRIVAL } from '../data/aircraft.js';
+import { markRoutesDirty, markSchedulesDirty, getSchedulesByRouteIndexed } from './indexHelpers.js';
 
 export function createRoute(originIata, destinationIata) {
     const state = getState();
@@ -53,6 +54,7 @@ export function createRoute(originIata, destinationIata) {
     };
 
     state.routes.push(route);
+    markRoutesDirty();
     addLogEntry(`Route created: ${originIata} → ${destinationIata} (${Math.round(distance)} km)`, 'route');
     return route;
 }
@@ -65,6 +67,8 @@ export function deleteRoute(routeId) {
     const route = state.routes[idx];
 
     state.schedules = state.schedules.filter(s => s.routeId !== routeId);
+    markRoutesDirty();
+    markSchedulesDirty();
 
     const activeOnRoute = state.flights.active.filter(f => f.routeId === routeId);
     if (activeOnRoute.length > 0) {
@@ -111,11 +115,21 @@ export function calculateRouteDemand(origin, dest, distance) {
     return Math.max(30, Math.round(base));
 }
 
+/**
+ * Canonical price elasticity formula. All UI views should import this
+ * instead of duplicating the inline formula.
+ * @param {number} fareMultiplier - 0.75 to 1.50
+ * @returns {number} elasticity factor (0.25 to 1.0+)
+ */
+export function calculatePriceElasticity(fareMultiplier) {
+    return Math.max(0.25, 1 - (fareMultiplier - 1) * 0.8);
+}
+
 export function calculateLoadFactor(route, totalSeatsOffered) {
     if (totalSeatsOffered === 0) return 0;
 
     const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
-    const priceElasticity = Math.max(0.25, 1 - (multiplier - 1) * 0.8);
+    const priceElasticity = calculatePriceElasticity(multiplier);
     const dailyDemand = route.demand * priceElasticity;
 
     const ratio = dailyDemand / totalSeatsOffered;
@@ -166,7 +180,7 @@ export function getRoutesByAirport(iata) {
 
 export function getTotalDailySeatsOnRoute(routeId) {
     const state = getState();
-    const schedules = state.schedules.filter(s => s.routeId === routeId && s.active);
+    const schedules = getSchedulesByRouteIndexed(routeId).filter(s => s.active);
     let totalSeats = 0;
     for (const sched of schedules) {
         const aircraft = state.fleet.find(f => f.id === sched.aircraftId);

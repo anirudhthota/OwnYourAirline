@@ -158,6 +158,19 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - **Fix 8: Dashboard Delayed Flights** — Changed hardcoded `delayedFlights = 0` to `state.delayedFlights.length`.
 - **Fix 9: Rotation Timeline Idle Gaps** — `rotationEngine.js` now fills gaps between flight/turnaround blocks with explicit `idle` blocks, giving full 24h coverage with tooltips.
 
+### Phase 3.5 — Stabilization + Scalability Foundations
+
+**Remaining Audit Fixes:**
+- **E1: Shared Elasticity Helper** — Extracted `calculatePriceElasticity(fareMultiplier)` in `routeEngine.js`. Replaced inline formula in `RouteDetailView.js` (2 locations), `NetworkView.js`, `SchedulePanel.js`.
+- **E2: Fleet Summary Fix** — `getFleetSummary()` in `fleetManager.js` now counts `maintenance` and `maintenance_due` aircraft statuses.
+- **E5/E6: Window Globals Cleanup** — Removed `window._hubOpsBack/_hubOpsRefresh` from `HubOperationsView.js` and `window._acDetailBack/_acDetailSell/_acDetailMaint` from `AircraftDetailView.js`. Replaced with `data-action` event delegation.
+
+**Scalability Foundations:**
+- **Airport O(1) Index** — `airports.js` now builds `AIRPORT_INDEX = new Map()` at module load. `getAirportByIata` uses `Map.get()` instead of `AIRPORTS.find()` (was O(n) on 300+ airports, called 40+ times).
+- **Distance Cache** — `getDistanceBetweenAirports` caches computed distances in a `Map` keyed by sorted IATA pair.
+- **Index Helpers** — New `engine/indexHelpers.js` provides lazy-rebuild indexed lookups: `getSchedulesByRouteIndexed`, `getSchedulesByAircraftIndexed`, `getRoutesByOrigin`, `getRoutesByDestination`, `getRouteByIdIndexed`. Dirty flags are set by mutation functions in `scheduler.js` and `routeEngine.js`.
+- **Engine Wiring** — `scheduler.js`, `routeEngine.js`, `rotationEngine.js`, `transfers.js` all use indexed helpers. `getSchedulesByRoute`/`getSchedulesByAircraft` in `scheduler.js` delegate to indexed versions for backward compat.
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs

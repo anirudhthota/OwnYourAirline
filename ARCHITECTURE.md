@@ -15,7 +15,7 @@ OwnYourAirline/
 ├── data/                   — Static data (no state mutation)
 │   ├── aircraft.js         — 14 aircraft types with specs, cost constants, turnaround times, maintenance thresholds
 │   ├── airlines.js         — 150+ real AI airlines with hubs, alliances, fleet preferences
-│   └── airports.js         — 300+ real airports with coords/slots, slot control levels, distance calc
+│   └── airports.js         — 300+ real airports with coords/slots, slot control levels, O(1) Map index, distance cache
 │
 ├── engine/                 — Game logic (reads and mutates state)
 │   ├── state.js            — Central game state, create/get/set, cash operations, time utilities, save/load
@@ -24,6 +24,7 @@ OwnYourAirline/
 │   ├── routeEngine.js      — Route CRUD, block time, fare/demand/cost/revenue calculations
 │   ├── rotationEngine.js   — Dynamic derivation of daily aircraft multi-route rotation sequences
 │   ├── scheduler.js        — Schedule CRUD, turnaround validation, banked departures, min aircraft calc
+│   ├── indexHelpers.js     — Lazy-rebuild index Maps for schedules (by route/aircraft) and routes (by origin/dest)
 │   ├── fleetManager.js     — Fleet CRUD (buy/sell/lease/return), used market, fleet summary
 │   └── aiEngine.js         — AI airline initialization, route generation, monthly expansion
 │

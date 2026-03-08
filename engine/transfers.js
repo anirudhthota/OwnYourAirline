@@ -1,6 +1,7 @@
 import { getState, getGameTime } from './state.js';
 import { getAirportByIata, getDistanceBetweenAirports } from '../data/airports.js';
 import { calculateRouteDemand } from './routeEngine.js';
+import { getSchedulesByRouteIndexed } from './indexHelpers.js';
 
 export const TRANSFER_RULES = {
     penalty: 0.4,
@@ -11,7 +12,7 @@ export const TRANSFER_RULES = {
 export function recalculateTransferDemand() {
     const state = getState();
     const currentDay = Math.floor(state.clock.totalMinutes / 1440);
-    
+
     // Only calculate once per day
     if (state.transfers.lastCalculatedDay === currentDay) return;
     state.transfers.lastCalculatedDay = currentDay;
@@ -40,17 +41,17 @@ export function recalculateTransferDemand() {
             const originAirport = getAirportByIata(originCode);
             const destAirport = getAirportByIata(destCode);
             if (!originAirport || !destAirport) continue;
-            
+
             const distance = getDistanceBetweenAirports(originCode, destCode);
             let baseDemand = calculateRouteDemand(originAirport, destAirport, distance);
             let transferDemand = baseDemand * TRANSFER_RULES.penalty;
 
             // Check competitor direct route
-            const competitorDirect = aiRoutes.some(ar => 
+            const competitorDirect = aiRoutes.some(ar =>
                 (ar.origin === originCode && ar.destination === destCode) ||
                 (ar.origin === destCode && ar.destination === originCode)
             );
-            
+
             if (competitorDirect) {
                 transferDemand *= TRANSFER_RULES.competitorDirectPenalty;
             }
@@ -59,8 +60,8 @@ export function recalculateTransferDemand() {
             if (transferDemand <= 0) continue;
 
             // Schedule Pairing Verification
-            const inSchedules = state.schedules.filter(s => s.routeId === inRoute.id && s.aircraftId !== null);
-            const outSchedules = state.schedules.filter(s => s.routeId === outRoute.id && s.aircraftId !== null);
+            const inSchedules = getSchedulesByRouteIndexed(inRoute.id).filter(s => s.aircraftId !== null);
+            const outSchedules = getSchedulesByRouteIndexed(outRoute.id).filter(s => s.aircraftId !== null);
 
             let earliestConnection = null;
 
@@ -71,19 +72,19 @@ export function recalculateTransferDemand() {
 
                 for (const inDep of inSched.departureTimes) {
                     const arrMinOfDay = (inDep.hour * 60 + inDep.minute + inSched.blockTimeMinutes) % 1440;
-                    
+
                     for (const outSched of outSchedules) {
                         const outAircraft = state.fleet.find(f => f.id === outSched.aircraftId);
                         if (!outAircraft || outAircraft.status === 'maintenance') continue;
 
                         for (const outDep of outSched.departureTimes) {
                             let outDepMinOfDay = outDep.hour * 60 + outDep.minute;
-                            
+
                             // Midnight wraparound buffer inclusion
                             if (outDepMinOfDay < arrMinOfDay + TRANSFER_RULES.minimumConnectionTime) {
                                 outDepMinOfDay += 1440; // Projects precisely to the literal next calendar occurrence
                             }
-                            
+
                             if (outDepMinOfDay >= arrMinOfDay + TRANSFER_RULES.minimumConnectionTime) {
                                 if (!earliestConnection || outDepMinOfDay < earliestConnection) {
                                     earliestConnection = outDepMinOfDay;

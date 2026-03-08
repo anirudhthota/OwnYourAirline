@@ -1,5 +1,5 @@
 import { getState, getGameTime, formatMoney } from '../../engine/state.js';
-import { getRouteById, calculateBlockTime, canAircraftFlyRoute, calculateRouteDemand } from '../../engine/routeEngine.js';
+import { getRouteById, calculateBlockTime, canAircraftFlyRoute, calculateRouteDemand, calculatePriceElasticity } from '../../engine/routeEngine.js';
 import { getAircraftByType, getTurnaroundTime } from '../../data/aircraft.js';
 import { getAirportByIata } from '../../data/airports.js';
 import { getAircraftNextFree } from '../../engine/fleetManager.js';
@@ -470,7 +470,7 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
 
     function updateFarePreview(mul) {
         const ticketPrice = route.baseFare * mul;
-        const priceElasticity = Math.max(0.25, 1 - (mul - 1) * 0.8);
+        const priceElasticity = calculatePriceElasticity(mul);
         const estDemand = calculateRouteDemand(getAirportByIata(route.origin), getAirportByIata(route.destination), route.distance) * priceElasticity;
 
         container.querySelector('#sp-prev-price').textContent = '$' + Math.round(ticketPrice);

@@ -2,6 +2,7 @@ import { getState, formatMoney, MINUTES_PER_DAY } from '../../engine/state.js';
 import { getAircraftByType } from '../../data/aircraft.js';
 import { getDistanceBetweenAirports } from '../../data/airports.js';
 import { getSchedulesByRoute } from '../../engine/scheduler.js';
+import { calculatePriceElasticity } from '../../engine/routeEngine.js';
 import { DataTable } from '../components/DataTable.js';
 import { StatCard } from '../components/StatCard.js';
 import { Toolbar } from '../components/Toolbar.js';
@@ -116,7 +117,7 @@ function renderNetworkContent() {
 
         // Spill
         const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
-        const priceElasticity = Math.max(0.25, 1 - (multiplier - 1) * 0.8);
+        const priceElasticity = calculatePriceElasticity(multiplier);
         const effectiveDemand = route.demand * priceElasticity;
 
         let rSpill = Math.max(0, effectiveDemand - rPax);

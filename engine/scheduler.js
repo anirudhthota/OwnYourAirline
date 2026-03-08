@@ -2,6 +2,7 @@ import { getState, addLogEntry, getGameTime } from './state.js';
 import { getRouteById, calculateBlockTime, canAircraftFlyRoute } from './routeEngine.js';
 import { getAircraftByType, getTurnaroundTime } from '../data/aircraft.js';
 import { validateAircraftRotationChain, getAircraftNextOperationalLocation } from './rotationEngine.js';
+import { markSchedulesDirty, getSchedulesByRouteIndexed, getSchedulesByAircraftIndexed } from './indexHelpers.js';
 
 export const SCHEDULE_MODE = {
     CUSTOM: 'CUSTOM',
@@ -138,6 +139,7 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
 
     state.schedules.push(schedule);
     route.schedules.push(schedule.id);
+    markSchedulesDirty();
 
     addLogEntry(`Schedule created: ${route.origin}→${route.destination} with ${acData.type}, ${times.length} daily departure(s)`, 'schedule');
     return { schedule, errors: [] };
@@ -156,6 +158,7 @@ export function deleteSchedule(scheduleId) {
     }
 
     state.schedules.splice(idx, 1);
+    markSchedulesDirty();
     addLogEntry(`Schedule ${scheduleId} deleted`, 'schedule');
     return true;
 }
@@ -170,6 +173,7 @@ export function updateScheduleDepartures(scheduleId, newTimes) {
         minute: t.minute
     })).sort((a, b) => a.hour * 60 + a.minute - b.hour * 60 - b.minute);
 
+    markSchedulesDirty();
     addLogEntry(`Schedule ${scheduleId} updated: ${newTimes.length} departure(s)`, 'schedule');
     return true;
 }
@@ -321,6 +325,7 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
     }
 
     const acData = getAircraftByType(aircraft.type);
+    markSchedulesDirty();
     addLogEntry(`Schedule ${scheduleId} updated: ${route.origin}\u2192${route.destination} with ${acData.type}, ${times.length} departure(s)`, 'schedule');
     return schedule;
 }
@@ -364,13 +369,11 @@ function generateBankedDepartures(bank, route, aircraftType) {
 }
 
 export function getSchedulesByRoute(routeId) {
-    const state = getState();
-    return state.schedules.filter(s => s.routeId === routeId);
+    return getSchedulesByRouteIndexed(routeId);
 }
 
 export function getSchedulesByAircraft(aircraftId) {
-    const state = getState();
-    return state.schedules.filter(s => s.aircraftId === aircraftId);
+    return getSchedulesByAircraftIndexed(aircraftId);
 }
 
 export function calculateMinAircraft(routeDistance, aircraftType, frequency) {
@@ -465,6 +468,7 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
         swapped++;
     }
 
+    markSchedulesDirty();
     addLogEntry(`Aircraft swapped: ${oldAc.registration} \u2192 ${newAc.registration} (${swapped} schedule(s) transferred)`, 'schedule');
     return { success: true, errors: [], swapped };
 }

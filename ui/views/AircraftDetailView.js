@@ -75,25 +75,10 @@ export function renderAircraftDetailView(container) {
 
     const ownershipStr = ac.ownership === 'OWNED' ? 'Owned' : 'Leased';
 
-    // Actions
-    window._acDetailBack = () => { showPanel('fleet'); };
-    window._acDetailSell = () => {
-        if (ac.ownership === 'OWNED') {
-            showConfirm('Sell Aircraft', `Sell <strong>${ac.type}</strong> (${ac.registration})?`, () => {
-                if (sellAircraft(ac.id)) { updateHUD(); showPanel('fleet'); }
-            });
-        }
-    };
-    window._acDetailMaint = () => {
-        showConfirm('Start Maintenance', `Start <strong>${ac.pendingCheckType}-Check</strong> for ${ac.registration}? Schedules will be unassigned.`, () => {
-            if (startMaintenance(ac.id)) { updateHUD(); renderAircraftDetailView(container); }
-        });
-    };
-
     let maintBtnHtml = '';
     if (ac.status === 'maintenance_due' || ac.status === 'idle' || ac.status === 'available') {
         const cType = ac.pendingCheckType || 'A';
-        maintBtnHtml = `<button class="btn-sm btn-accent" onclick="window._acDetailMaint()">Perform ${cType}-Check</button>`;
+        maintBtnHtml = `<button class="btn-sm btn-accent" data-action="maint">Perform ${cType}-Check</button>`;
     }
 
     const headerHtml = `
@@ -111,8 +96,8 @@ export function renderAircraftDetailView(container) {
             </div>
             <div style="display: flex; gap: 8px;">
                 ${maintBtnHtml}
-                ${ac.ownership === 'OWNED' ? `<button class="btn-sm btn-danger" onclick="window._acDetailSell()">Sell Aircraft</button>` : ''}
-                <button class="btn-sm" onclick="window._acDetailBack()">Back to Fleet</button>
+                ${ac.ownership === 'OWNED' ? `<button class="btn-sm btn-danger" data-action="sell">Sell Aircraft</button>` : ''}
+                <button class="btn-sm" data-action="back">Back to Fleet</button>
             </div>
         </div>
     `;
@@ -332,4 +317,21 @@ export function renderAircraftDetailView(container) {
         ${economicsHtml}
         ${futureHtml}
     `;
+
+    // Event delegation for action buttons
+    container.addEventListener('click', (e) => {
+        const action = e.target.dataset?.action;
+        if (!action) return;
+        if (action === 'back') {
+            showPanel('fleet');
+        } else if (action === 'sell' && ac.ownership === 'OWNED') {
+            showConfirm('Sell Aircraft', `Sell <strong>${ac.type}</strong> (${ac.registration})?`, () => {
+                if (sellAircraft(ac.id)) { updateHUD(); showPanel('fleet'); }
+            });
+        } else if (action === 'maint') {
+            showConfirm('Start Maintenance', `Start <strong>${ac.pendingCheckType}-Check</strong> for ${ac.registration}? Schedules will be unassigned.`, () => {
+                if (startMaintenance(ac.id)) { updateHUD(); renderAircraftDetailView(container); }
+            });
+        }
+    });
 }

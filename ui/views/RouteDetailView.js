@@ -1,7 +1,7 @@
 import { getState, formatMoney } from '../../engine/state.js';
 import { getAirportByIata } from '../../data/airports.js';
 import { getSchedulesByRoute, deleteSchedule } from '../../engine/scheduler.js';
-import { calculateBlockTime, getRouteById, calculateRouteDemand } from '../../engine/routeEngine.js';
+import { calculateBlockTime, getRouteById, calculateRouteDemand, calculatePriceElasticity } from '../../engine/routeEngine.js';
 import { getAircraftByType } from '../../data/aircraft.js';
 import { StatCard } from '../components/StatCard.js';
 import { DataTable } from '../components/DataTable.js';
@@ -45,7 +45,7 @@ export function renderRouteDetailView(container) {
 
     // Capacity & Demand
     const multiplier = route.fareMultiplier !== undefined ? route.fareMultiplier : 1.0;
-    const priceElasticity = Math.max(0.25, 1 - (multiplier - 1) * 0.8);
+    const priceElasticity = calculatePriceElasticity(multiplier);
     const localDemand = calculateRouteDemand(origin, dest, route.distance) * priceElasticity;
 
     const transferDemandMap = state.transfers.flowRates[`${route.origin}-${route.destination}`];
@@ -309,7 +309,7 @@ export function renderRouteDetailView(container) {
             fareValLabel.textContent = val.toFixed(2) + 'x';
             farePriceLabel.textContent = '$' + Math.round(route.baseFare * val);
 
-            const dynElasticity = Math.max(0.25, 1 - (val - 1) * 0.8);
+            const dynElasticity = calculatePriceElasticity(val);
             fareImpactLabel.textContent = (dynElasticity * 100).toFixed(0) + '%';
             fareImpactLabel.style.color = dynElasticity < 1 ? 'var(--color-danger)' : 'var(--color-success)';
         });

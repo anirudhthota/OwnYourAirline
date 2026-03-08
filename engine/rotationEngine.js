@@ -1,6 +1,7 @@
 import { getState } from './state.js';
 import { getRouteById, calculateBlockTime } from './routeEngine.js';
 import { getTurnaroundTime, getAircraftByType } from '../data/aircraft.js';
+import { getSchedulesByAircraftIndexed } from './indexHelpers.js';
 
 /**
  * Builds a chronological day-level chain of scheduled flights for an aircraft.
@@ -11,7 +12,7 @@ import { getTurnaroundTime, getAircraftByType } from '../data/aircraft.js';
  */
 export function buildAircraftRotationChain(aircraftId, dayOffset = 0, excludeScheduleId = null) {
     const state = getState();
-    const schedules = state.schedules.filter(s => s.aircraftId === aircraftId && s.active && s.id !== excludeScheduleId);
+    const schedules = getSchedulesByAircraftIndexed(aircraftId).filter(s => s.active && s.id !== excludeScheduleId);
 
     const aircraft = state.fleet.find(f => f.id === aircraftId);
     if (!aircraft) return [];

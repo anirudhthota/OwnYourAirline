@@ -185,11 +185,13 @@ export function getFleetSummary() {
     const summary = {};
     for (const aircraft of state.fleet) {
         if (!summary[aircraft.type]) {
-            summary[aircraft.type] = { total: 0, available: 0, inFlight: 0, owned: 0, leased: 0 };
+            summary[aircraft.type] = { total: 0, available: 0, inFlight: 0, maintenance: 0, maintenanceDue: 0, owned: 0, leased: 0 };
         }
         summary[aircraft.type].total++;
         if (aircraft.status === 'available') summary[aircraft.type].available++;
         if (aircraft.status === 'in_flight') summary[aircraft.type].inFlight++;
+        if (aircraft.status === 'maintenance') summary[aircraft.type].maintenance++;
+        if (aircraft.status === 'maintenance_due') summary[aircraft.type].maintenanceDue++;
         if (aircraft.ownership === OWNERSHIP_TYPE.OWNED) summary[aircraft.type].owned++;
         if (aircraft.ownership === OWNERSHIP_TYPE.LEASED) summary[aircraft.type].leased++;
     }
