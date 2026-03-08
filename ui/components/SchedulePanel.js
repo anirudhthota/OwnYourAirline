@@ -6,6 +6,7 @@ import { getAircraftNextFree } from '../../engine/fleetManager.js';
 import { createSchedule, updateSchedule, deleteSchedule, generateFlightNumbers, validateScheduleParams, calculateMinAircraft } from '../../engine/scheduler.js';
 import { showModal, closeModal } from './Modal.js';
 import { showPanel } from '../services/uiState.js';
+import { getAircraftNextOperationalLocation } from '../../engine/rotationEngine.js';
 
 export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null }) {
     const state = getState();
@@ -297,8 +298,21 @@ export function openSchedulePanel({ routeId, mode = 'create', scheduleId = null 
             warnings.push(`${aircraft.registration} is in maintenance.`);
         }
 
-        if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
-            warnings.push(`${aircraft.registration} is currently at ${aircraft.currentLocation}. A prior scheduled flight must deliver it to ${route.origin} before departure.`);
+        let outVal = container.querySelector('#sp-new-time-out').value;
+        let pMin = 0;
+        if (outVal) {
+            const [h, m] = outVal.split(':').map(Number);
+            pMin = h * 60 + m;
+        }
+
+        const nextLoc = getAircraftNextOperationalLocation(aircraftId, pMin, mode === 'edit' ? scheduleId : null);
+
+        if (nextLoc && nextLoc !== route.origin && nextLoc !== 'airborne') {
+            warnings.push(`${aircraft.registration} will be at ${nextLoc} — must be at ${route.origin} to operate this flight.`);
+        } else if (nextLoc === 'airborne') {
+            warnings.push(`${aircraft.registration} will be airborne at this time.`);
+        } else if (!nextLoc && aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
+            warnings.push(`${aircraft.registration} is currently at ${aircraft.currentLocation}.`);
         }
 
         if (warnings.length > 0) {

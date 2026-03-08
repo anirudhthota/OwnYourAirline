@@ -6,6 +6,7 @@ import { StatCard } from '../components/StatCard.js';
 import { DataTable } from '../components/DataTable.js';
 import { formatLocation, uiState, showPanel } from '../services/uiState.js';
 import { sellAircraft, startMaintenance } from '../../engine/fleetManager.js';
+import { getAircraftRotationTimelineBlocks, buildAircraftRotationChain } from '../../engine/rotationEngine.js';
 import { showConfirm } from '../components/Modal.js';
 import { updateHUD } from '../hud.js';
 
@@ -154,49 +155,21 @@ export function renderAircraftDetailView(container) {
 
     // --- 24-Hour Timeline ---
     let blocksHtml = '';
+    const timelineBlocks = getAircraftRotationTimelineBlocks(ac.id);
 
-    if (ac.status === 'maintenance') {
-        const remainingHours = Math.ceil((ac.maintenanceReleaseTime - state.clock.totalMinutes) / 60);
-        blocksHtml = `<div style="position:absolute; left:0; width:100%; height:100%; background:var(--color-danger,#ef4444); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; font-size:12px;">IN MAINTENANCE (${remainingHours}h remaining)</div>`;
-    } else if (schedules.length === 0) {
-        blocksHtml = `<div title="IDLE" style="position:absolute; left:0; width:100%; height:100%; background:var(--bg-surface-highlight); display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px; font-weight:bold;">IDLE</div>`;
-    } else {
-        schedules.forEach(s => {
-            const route = getRouteById(s.routeId);
-            if (!route) return;
-            const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : 0;
-            const turnaround = s.turnaroundMinutes;
+    timelineBlocks.forEach(b => {
+        const clampedStart = Math.max(0, b.start);
+        const clampedEnd = Math.min(1440, b.end);
+        const widthPct = ((clampedEnd - clampedStart) / 1440) * 100;
+        const leftPct = (clampedStart / 1440) * 100;
 
-            s.departureTimes.forEach(t => {
-                const depAbs = t.hour * 60 + t.minute;
-                const arrAbs = depAbs + blockTime;
-                const turnEndAbs = arrAbs + turnaround;
+        if (widthPct <= 0) return;
 
-                const renderBlock = (start, end, color, label) => {
-                    if (start >= 1440) return;
-                    const clampedStart = Math.max(0, start);
-                    const clampedEnd = Math.min(1440, end);
-                    const widthPct = ((clampedEnd - clampedStart) / 1440) * 100;
-                    const leftPct = (clampedStart / 1440) * 100;
+        const textColor = b.type === 'idle' ? 'var(--text-muted)' : '#fff';
+        const showLabel = widthPct > 10 ? b.label : '';
 
-                    if (widthPct <= 0) return;
-
-                    const showLabel = widthPct > 10 ? label : '';
-                    blocksHtml += `<div title="${label} (${Math.floor(clampedStart / 60)}:${String(clampedStart % 60).padStart(2, '0')} - ${Math.floor(clampedEnd / 60)}:${String(clampedEnd % 60).padStart(2, '0')})" style="position:absolute; left:${leftPct}%; width:${widthPct}%; height:100%; background:${color}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:9px; overflow:hidden; white-space:nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5); border-right: 1px solid rgba(0,0,0,0.2);">${showLabel}</div>`;
-                };
-
-                const fltLabel = `${route.origin}\u2192${route.destination}`;
-
-                // Flight
-                renderBlock(depAbs, arrAbs, 'var(--color-info,#3b82f6)', fltLabel);
-                if (arrAbs > 1440) renderBlock(depAbs - 1440, arrAbs - 1440, 'var(--color-info,#3b82f6)', fltLabel);
-
-                // Turnaround
-                renderBlock(arrAbs, turnEndAbs, 'var(--color-warning,#f59e0b)', 'Turnaround');
-                if (turnEndAbs > 1440) renderBlock(arrAbs - 1440, turnEndAbs - 1440, 'var(--color-warning,#f59e0b)', 'Turnaround');
-            });
-        });
-    }
+        blocksHtml += `<div title="${b.label} (${Math.floor(clampedStart / 60)}:${String(clampedStart % 60).padStart(2, '0')} - ${Math.floor(clampedEnd / 60)}:${String(clampedEnd % 60).padStart(2, '0')})" style="position:absolute; left:${leftPct}%; width:${widthPct}%; height:100%; background:${b.color}; display:flex; align-items:center; justify-content:center; color:${textColor}; font-size:9px; overflow:hidden; white-space:nowrap; text-shadow: ${b.type === 'idle' ? 'none' : '0 1px 2px rgba(0,0,0,0.5)'}; border-right: 1px solid rgba(0,0,0,0.2); font-weight:bold;">${showLabel}</div>`;
+    });
 
     const timelineHtml = `
         <h2 class="uc-section-title">24-Hour Timeline</h2>
@@ -220,68 +193,59 @@ export function renderAircraftDetailView(container) {
     const tableHeaders = ['Flight', 'Route', 'Departure', 'Arrival', 'Passengers', 'Transfers', 'Load Factor', 'Revenue', 'Profit', 'Status'];
     let assignmentRowsHtml = '';
 
-    if (schedules.length === 0) {
+    const rotationChain = buildAircraftRotationChain(ac.id);
+
+    if (rotationChain.length === 0) {
         assignmentRowsHtml = '';
     } else {
-        schedules.forEach(s => {
-            const route = getRouteById(s.routeId);
-            if (!route) return;
-            const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : 0;
+        rotationChain.forEach((leg, i) => {
+            const flightNumber = leg.flightNumber || `${state.config.iataCode}${leg.scheduleId}x${i}`;
+            const depH = Math.floor(leg.depMinute / 60) % 24;
+            const depM = leg.depMinute % 60;
+            const arrH = Math.floor(leg.arrMinute / 60) % 24;
+            const arrM = leg.arrMinute % 60;
+            const depStr = `${String(depH).padStart(2, '0')}:${String(depM).padStart(2, '0')}`;
+            const arrStr = `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
 
-            s.departureTimes.forEach((t, i) => {
-                const flightNumber = (s.flightNumbers && s.flightNumbers[i]) ? s.flightNumbers[i] : `${state.config.iataCode}${s.id}x${i}`;
-                const depH = parseInt(t.hour) || 0;
-                const depM = parseInt(t.minute) || 0;
-                const arrTotal = depH * 60 + depM + blockTime;
-                const arrH = Math.floor(arrTotal / 60) % 24;
-                const arrM = arrTotal % 60;
-                const depStr = `${String(depH).padStart(2, '0')}:${String(depM).padStart(2, '0')}`;
-                const arrStr = `${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}`;
+            const recentF = recentFlights.find(f => f.flightNumber === flightNumber);
 
-                const recentF = recentFlights.find(f => f.flightNumber === flightNumber);
+            let paxStr = '-';
+            let txStr = '-';
+            let lfStr = '-';
+            let revStr = '-';
+            let profStr = '-';
+            let profColor = 'inherit';
+            let statusBadge = '<span class="badge" style="background:var(--bg-surface-highlight);color:var(--text-muted)">Scheduled</span>';
 
-                let paxStr = '-';
-                let txStr = '-';
-                let lfStr = '-';
-                let revStr = '-';
-                let profStr = '-';
-                let profColor = 'inherit';
-                let statusBadge = '<span class="badge" style="background:var(--bg-surface-highlight);color:var(--text-muted)">Scheduled</span>';
+            const currentMinuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
+            if (recentF) {
+                paxStr = recentF.passengers || 0;
+                txStr = recentF.transferPassengers || 0;
+                lfStr = ((recentF.loadFactor || 0) * 100).toFixed(0) + '%';
+                revStr = '$' + formatMoney(recentF.revenue || 0);
+                const pr = (recentF.revenue || 0) - (recentF.cost || 0);
+                profStr = '$' + formatMoney(pr);
+                if (pr > 0) profColor = 'var(--color-success)';
+                else if (pr < 0) profColor = 'var(--color-danger)';
+                statusBadge = '<span class="badge" style="background:var(--color-success,#22c55e);">Completed</span>';
+            } else if (ac.status === 'in_flight') {
+                // Simplified active flight check
+            }
 
-                currentMinuteOfDay = state.clock.totalMinutes % MINUTES_PER_DAY;
-                if (recentF) {
-                    paxStr = recentF.passengers || 0;
-                    txStr = recentF.transferPassengers || 0;
-                    lfStr = ((recentF.loadFactor || 0) * 100).toFixed(0) + '%';
-                    revStr = '$' + formatMoney(recentF.revenue || 0);
-                    const pr = (recentF.revenue || 0) - (recentF.cost || 0);
-                    profStr = '$' + formatMoney(pr);
-                    if (pr > 0) profColor = 'var(--color-success)';
-                    else if (pr < 0) profColor = 'var(--color-danger)';
-                    statusBadge = '<span class="badge" style="background:var(--color-success,#22c55e);">Completed</span>';
-                } else if (ac.status === 'in_flight') {
-                    // Quick check if this is the active flight based on time; simplified assumption
-                    const depAbs = depH * 60 + depM;
-                    const endAbs = arrTotal;
-                    // if active flight overlaps current time relative to 24h
-                    // (Skipping strict active check here for simplicity, mark as delayed/active if needed, or stick to Scheduled)
-                }
-
-                assignmentRowsHtml += `
-                    <tr>
-                        <td><strong>${flightNumber}</strong></td>
-                        <td>${route.origin} \u2192 ${route.destination}</td>
-                        <td>${depStr}</td>
-                        <td>${arrStr}</td>
-                        <td>${paxStr}</td>
-                        <td>${txStr}</td>
-                        <td>${lfStr}</td>
-                        <td>${revStr}</td>
-                        <td style="color:${profColor}; font-family:var(--font-mono);">${profStr}</td>
-                        <td>${statusBadge}</td>
-                    </tr>
-                `;
-            });
+            assignmentRowsHtml += `
+                <tr>
+                    <td><strong>${flightNumber}</strong></td>
+                    <td>${leg.origin} \u2192 ${leg.destination}</td>
+                    <td>${depStr}</td>
+                    <td>${arrStr}</td>
+                    <td>${paxStr}</td>
+                    <td>${txStr}</td>
+                    <td>${lfStr}</td>
+                    <td>${revStr}</td>
+                    <td style="color:${profColor}; font-family:var(--font-mono);">${profStr}</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `;
         });
     }
 

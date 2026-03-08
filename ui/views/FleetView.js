@@ -10,6 +10,7 @@ import { StatCard } from '../components/StatCard.js';
 import { DataTable } from '../components/DataTable.js';
 import { calculateBlockTime } from '../../engine/routeEngine.js';
 import { getRouteById } from '../../engine/routeEngine.js';
+import { getAircraftRotationTimelineBlocks } from '../../engine/rotationEngine.js';
 
 let selectedAircraftId = null;
 
@@ -261,63 +262,33 @@ function renderAircraftTimeline() {
     const schedules = getSchedulesByAircraft(ac.id);
 
     let blocksHtml = '';
+    const blocks = getAircraftRotationTimelineBlocks(ac.id);
 
-    // If fully in maintenance
-    if (ac.status === 'maintenance') {
-        const remainingHours = Math.ceil((ac.maintenanceReleaseTime - state.clock.totalMinutes) / 60);
-        blocksHtml = `<div style="position:absolute; left:0; width:100%; height:100%; background:var(--color-danger,#ef4444); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:bold; font-size:12px;">IN MAINTENANCE (${remainingHours}h remaining)</div>`;
-    } else if (schedules.length === 0) {
-        // Render 24-hour idle block for empty schedule
-        blocksHtml = `<div title="IDLE" style="position:absolute; left:0; width:100%; height:100%; background:var(--bg-surface-highlight); display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px; font-weight:bold;">IDLE</div>`;
-    } else {
-        // Build flight and turnaround blocks
-        schedules.forEach(s => {
-            const route = getRouteById(s.routeId);
-            if (!route) return;
-            const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : 0;
-            const turnaround = s.turnaroundMinutes;
+    blocks.forEach(b => {
+        const clampedStart = Math.max(0, b.start);
+        const clampedEnd = Math.min(1440, b.end);
+        const widthPct = ((clampedEnd - clampedStart) / 1440) * 100;
+        const leftPct = (clampedStart / 1440) * 100;
 
-            s.departureTimes.forEach(t => {
-                const depAbs = t.hour * 60 + t.minute;
-                const arrAbs = depAbs + blockTime;
-                const turnEndAbs = arrAbs + turnaround;
+        if (widthPct <= 0) return;
 
-                const renderBlock = (start, end, color, label) => {
-                    if (start >= 1440) return; // Completely next day
-                    const clampedStart = Math.max(0, start);
-                    const clampedEnd = Math.min(1440, end);
-                    const widthPct = ((clampedEnd - clampedStart) / 1440) * 100;
-                    const leftPct = (clampedStart / 1440) * 100;
+        // Idle block is usually light gray, might not need white text
+        const textColor = b.type === 'idle' ? 'var(--text-muted)' : '#fff';
+        const showLabel = widthPct > 10 ? b.label : '';
 
-                    if (widthPct <= 0) return;
-
-                    const showLabel = widthPct > 10 ? label : '';
-                    blocksHtml += `<div title="${label} (${Math.floor(clampedStart / 60)}:${String(clampedStart % 60).padStart(2, '0')} - ${Math.floor(clampedEnd / 60)}:${String(clampedEnd % 60).padStart(2, '0')})" style="position:absolute; left:${leftPct}%; width:${widthPct}%; height:100%; background:${color}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:9px; overflow:hidden; white-space:nowrap; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">${showLabel}</div>`;
-                };
-
-                const fltLabel = `${route.origin}\u2192${route.destination}`;
-
-                // Flight block (supports wrapping over midnight)
-                renderBlock(depAbs, arrAbs, 'var(--color-info,#3b82f6)', fltLabel);
-                if (arrAbs > 1440) renderBlock(depAbs - 1440, arrAbs - 1440, 'var(--color-info,#3b82f6)', fltLabel);
-
-                // Turnaround block
-                renderBlock(arrAbs, turnEndAbs, 'var(--color-warning,#f59e0b)', 'TURN');
-                if (turnEndAbs > 1440) renderBlock(arrAbs - 1440, turnEndAbs - 1440, 'var(--color-warning,#f59e0b)', 'TURN');
-            });
-        });
-    }
+        blocksHtml += `<div title="${b.label} (${Math.floor(clampedStart / 60)}:${String(clampedStart % 60).padStart(2, '0')} - ${Math.floor(clampedEnd / 60)}:${String(clampedEnd % 60).padStart(2, '0')})" style="position:absolute; left:${leftPct}%; width:${widthPct}%; height:100%; background:${b.color}; display:flex; align-items:center; justify-content:center; color:${textColor}; font-size:9px; overflow:hidden; white-space:nowrap; text-shadow: ${b.type === 'idle' ? 'none' : '0 1px 2px rgba(0,0,0,0.5)'}; font-weight:bold;">${showLabel}</div>`;
+    });
 
     // Calculate panel stats
     let activeMinutes = 0;
     let flightsToday = 0;
-    schedules.forEach(s => {
-        const route = getRouteById(s.routeId);
-        if (!route) return;
-        const blockTime = acData ? calculateBlockTime(route.distance, ac.type) : 0;
-        flightsToday += s.departureTimes.length;
-        activeMinutes += (blockTime + s.turnaroundMinutes) * s.departureTimes.length;
+    blocks.forEach(b => {
+        if (b.type === 'flight' || b.type === 'turnaround') {
+            activeMinutes += (b.end - b.start);
+        }
     });
+    flightsToday = schedules.reduce((sum, s) => sum + s.departureTimes.length, 0);
+
     const utilPercent = Math.min(100, (activeMinutes / 1440) * 100);
 
     let panelMaintState = 'OK';

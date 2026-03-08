@@ -22,7 +22,8 @@ OwnYourAirline/
 │   ├── sim.js              — Tick loop, flight departures, active flight processing, slots, day/month end
 │   ├── init.js             — New game initialization, save loading, simulation startup
 │   ├── routeEngine.js      — Route CRUD, block time, fare/demand/cost/revenue calculations
-│   ├── scheduler.js        — Schedule CRUD, turnaround validation, banked departures, min aircraft calc, physical location projection (assumedStartLocation)
+│   ├── rotationEngine.js   — Dynamic derivation of daily aircraft multi-route rotation sequences
+│   ├── scheduler.js        — Schedule CRUD, turnaround validation, banked departures, min aircraft calc
 │   ├── fleetManager.js     — Fleet CRUD (buy/sell/lease/return), used market, fleet summary
 │   └── aiEngine.js         — AI airline initialization, route generation, monthly expansion
 │

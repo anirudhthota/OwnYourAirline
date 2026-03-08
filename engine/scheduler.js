@@ -1,6 +1,7 @@
 import { getState, addLogEntry, getGameTime } from './state.js';
 import { getRouteById, calculateBlockTime, canAircraftFlyRoute } from './routeEngine.js';
-import { getAircraftByType, getTurnaroundTime } from '../data/aircraft.js';
+import { getAircraftByType, getTurnaroundTime, calculateMinAircraft as calcMinAc } from '../data/aircraft.js';
+import { validateAircraftRotationChain, getAircraftNextOperationalLocation } from './rotationEngine.js';
 
 export const SCHEDULE_MODE = {
     CUSTOM: 'CUSTOM',
@@ -217,58 +218,35 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
         }
     }
 
-    // Maintenance validation — project if any departure time falls before maintenance release
-    if (times.length > 0 && aircraft.status === 'maintenance' && aircraft.maintenanceReleaseTime) {
-        const nowMin = state.clock.totalMinutes;
-        let earliestAbsoluteDep = Infinity;
-        for (const t of times) {
-            let nextDep = Math.floor(nowMin / 1440) * 1440 + (t.hour * 60 + t.minute);
-            if (nextDep <= nowMin) {
-                nextDep += 1440; // Next occurrence is tomorrow
-            }
-            if (nextDep < earliestAbsoluteDep) earliestAbsoluteDep = nextDep;
-        }
-
-        if (earliestAbsoluteDep < aircraft.maintenanceReleaseTime) {
-            const gt = getGameTime(aircraft.maintenanceReleaseTime);
-            const hrs = Math.ceil((aircraft.maintenanceReleaseTime - nowMin) / 60);
-            errors.push(`${aircraft.registration} is in maintenance until Day ${gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')} (${hrs}h from now). Cannot fulfill departure before release.`);
-        }
-    }
-
-    // Location check — project where aircraft will be at each proposed departure time
+    // Use Rotation Engine for Maintenance, Location Continuity, Turnaround, and Conflict validation
     if (times.length > 0) {
-        // Check the earliest departure — that's where the aircraft needs to be
         const earliestTime = times[0];
         const earliestDepMin = earliestTime.hour * 60 + earliestTime.minute;
-        const projectedLoc = assumedStartLocation || getProjectedLocation(aircraftId, earliestDepMin, excludeScheduleId);
-        if (projectedLoc && projectedLoc !== route.origin && projectedLoc !== 'airborne') {
-            errors.push(`${aircraft.registration} will be at ${projectedLoc} at ${String(earliestTime.hour).padStart(2, '0')}:${String(earliestTime.minute).padStart(2, '0')} — cannot depart ${route.origin}`);
-        } else if (projectedLoc === 'airborne') {
+        const nextLoc = getAircraftNextOperationalLocation(aircraftId, earliestDepMin, excludeScheduleId, assumedStartLocation);
+
+        if (nextLoc && nextLoc !== route.origin && nextLoc !== 'airborne') {
+            errors.push(`${aircraft.registration} will be at ${nextLoc} at ${String(earliestTime.hour).padStart(2, '0')}:${String(earliestTime.minute).padStart(2, '0')} — cannot depart ${route.origin}`);
+        } else if (nextLoc === 'airborne') {
             errors.push(`${aircraft.registration} will be airborne at ${String(earliestTime.hour).padStart(2, '0')}:${String(earliestTime.minute).padStart(2, '0')} — cannot depart ${route.origin}`);
         }
+
+        const blockTime = calculateBlockTime(route.distance, aircraft.type);
+        const extraLegs = times.map(t => ({
+            origin: route.origin,
+            destination: route.destination,
+            depMinute: t.hour * 60 + t.minute,
+            blockTime: blockTime
+        }));
+
+        const rotationErrors = validateAircraftRotationChain(aircraftId, extraLegs, excludeScheduleId, assumedStartLocation);
+        rotationErrors.forEach(err => errors.push(err));
     } else if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
         // Fallback for banked mode where times aren't resolved yet
         errors.push(`${aircraft.registration} is at ${aircraft.currentLocation} — cannot depart ${route.origin}`);
-    }
 
-    // Turnaround validation
-    if (times.length > 1 && acData) {
-        const blockTime = calculateBlockTime(route.distance, aircraft.type);
-        const turnaround = getTurnaroundTime(aircraft.type);
-        const sortedMinutes = times.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
-        for (let i = 1; i < sortedMinutes.length; i++) {
-            const gap = sortedMinutes[i] - sortedMinutes[i - 1];
-            const needed = blockTime + turnaround;
-            if (gap < needed) {
-                const arrH = Math.floor((sortedMinutes[i - 1] + blockTime) / 60) % 24;
-                const arrM = (sortedMinutes[i - 1] + blockTime) % 60;
-                const earliestH = Math.floor((sortedMinutes[i - 1] + needed) / 60) % 24;
-                const earliestM = (sortedMinutes[i - 1] + needed) % 60;
-                errors.push(
-                    `Insufficient turnaround. ${aircraft.registration} arrives at ${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')} and needs ${turnaround}min ground time. Earliest next departure: ${String(earliestH).padStart(2, '0')}:${String(earliestM).padStart(2, '0')}.`
-                );
-            }
+        // Maintenance check fallback
+        if (aircraft.status === 'maintenance' && aircraft.maintenanceReleaseTime) {
+            errors.push(`${aircraft.registration} is in maintenance.`);
         }
     }
 
@@ -280,45 +258,6 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
         const minAc = calculateMinAircraft(route.distance, aircraft.type, times.length);
         if (minAc > 1) {
             errors.push(`This route requires at least ${minAc} aircraft for ${times.length} daily departure(s). Round trip: ${Math.floor(roundTrip / 60)}h${roundTrip % 60}m exceeds 24 hours for one aircraft.`);
-        }
-    }
-
-    // Scheduling conflict check — does this aircraft already have conflicting schedules?
-    if (aircraft && times.length > 0 && acData) {
-        const existingScheds = state.schedules.filter(s => s.aircraftId === aircraftId && s.active && s.id !== excludeScheduleId);
-        const blockTime = calculateBlockTime(route.distance, aircraft.type);
-        const turnaround = getTurnaroundTime(aircraft.type);
-
-        for (const existing of existingScheds) {
-            const existingRoute = getRouteById(existing.routeId);
-            if (!existingRoute) continue;
-            for (const newTime of times) {
-                const newDepMin = newTime.hour * 60 + newTime.minute;
-                const newReturnMin = newDepMin + blockTime + turnaround;
-                for (const exTime of existing.departureTimes) {
-                    const exDepMin = exTime.hour * 60 + exTime.minute;
-                    const exReturnMin = exDepMin + existing.blockTimeMinutes + turnaround;
-
-                    const intervalsA = [
-                        { start: newDepMin, end: newReturnMin },
-                        { start: newDepMin + 1440, end: newReturnMin + 1440 },
-                        { start: newDepMin - 1440, end: newReturnMin - 1440 }
-                    ];
-
-                    let overlap = false;
-                    for (const intA of intervalsA) {
-                        if (intA.start < exReturnMin && exDepMin < intA.end) {
-                            overlap = true;
-                            break;
-                        }
-                    }
-                    if (overlap) {
-                        errors.push(
-                            `Scheduling conflict: ${aircraft.registration} is already scheduled on ${existingRoute.origin}\u2192${existingRoute.destination} departing ${String(exTime.hour).padStart(2, '0')}:${String(exTime.minute).padStart(2, '0')} (requires until ~${String(Math.floor(exReturnMin / 60) % 24).padStart(2, '0')}:${String(exReturnMin % 60).padStart(2, '0')} including turnaround). Conflicts with proposed departure at ${String(newTime.hour).padStart(2, '0')}:${String(newTime.minute).padStart(2, '0')}.`
-                        );
-                    }
-                }
-            }
         }
     }
 
@@ -474,103 +413,46 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
         }
     }
 
-    // Check if new aircraft is currently in flight
-    if (newAc.status === 'in_flight') {
-        const nextFree = state.flights.active.find(f => f.aircraftId === newAircraftId);
-        if (nextFree) {
-            const gt = getGameTime(nextFree.arrivalTime);
-            errors.push(`${newAc.registration} is airborne until Day ${(gt.week - 1) * 7 + gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`);
-        }
-    }
-
-    // Location check: new aircraft must be at the origin of the FIRST flight of the day
+    // Weave ALL inherited schedules into a list of extraLegs to simulate the swap
+    const extraLegs = [];
     let earliestDepMin = Infinity;
     let earliestRouteOrigin = null;
 
     for (const sched of affectedSchedules) {
         const schedRoute = getRouteById(sched.routeId);
         if (!schedRoute) continue;
+        const newBlockTime = calculateBlockTime(schedRoute.distance, newAc.type);
         for (const t of sched.departureTimes) {
             const depMin = t.hour * 60 + t.minute;
             if (depMin < earliestDepMin) {
                 earliestDepMin = depMin;
                 earliestRouteOrigin = schedRoute.origin;
             }
+
+            extraLegs.push({
+                origin: schedRoute.origin,
+                destination: schedRoute.destination,
+                depMinute: depMin,
+                blockTime: newBlockTime
+            });
         }
     }
 
+    // Location check: new aircraft must be at the origin of the FIRST flight of the chain
     if (earliestDepMin < Infinity && earliestRouteOrigin) {
-        const projectedLoc = getProjectedLocation(newAircraftId, earliestDepMin, null);
-        if (projectedLoc && projectedLoc !== earliestRouteOrigin && projectedLoc !== 'airborne') {
-            errors.push(`${newAc.registration} will be at ${projectedLoc} at ${String(Math.floor(earliestDepMin / 60)).padStart(2, '0')}:${String(earliestDepMin % 60).padStart(2, '0')} — must be at ${earliestRouteOrigin} to start the duty day`);
-        } else if (projectedLoc === 'airborne') {
+        const nextLoc = getAircraftNextOperationalLocation(newAircraftId, earliestDepMin, null);
+        if (nextLoc && nextLoc !== earliestRouteOrigin && nextLoc !== 'airborne') {
+            errors.push(`${newAc.registration} will be at ${nextLoc} at ${String(Math.floor(earliestDepMin / 60)).padStart(2, '0')}:${String(earliestDepMin % 60).padStart(2, '0')} — must be at ${earliestRouteOrigin} to start the duty day`);
+        } else if (nextLoc === 'airborne') {
             errors.push(`${newAc.registration} will be airborne at ${String(Math.floor(earliestDepMin / 60)).padStart(2, '0')}:${String(earliestDepMin % 60).padStart(2, '0')} — must be at ${earliestRouteOrigin}`);
-        }
-    } else if (newAc.currentLocation && newAc.currentLocation !== earliestRouteOrigin && !newAc.currentLocation.startsWith('airborne:')) {
-        errors.push(`${newAc.registration} is at ${newAc.currentLocation} — must be at ${earliestRouteOrigin}`);
-    }
-
-    // Turnaround feasibility for each affected schedule with new aircraft block times
-    const newTurnaround = getTurnaroundTime(newAc.type);
-    for (const sched of affectedSchedules) {
-        const schedRoute = getRouteById(sched.routeId);
-        if (!schedRoute) continue;
-        const newBlockTime = calculateBlockTime(schedRoute.distance, newAc.type);
-
-        if (sched.departureTimes.length > 1) {
-            const sortedMinutes = sched.departureTimes.map(t => t.hour * 60 + t.minute).sort((a, b) => a - b);
-            for (let i = 1; i < sortedMinutes.length; i++) {
-                const gap = sortedMinutes[i] - sortedMinutes[i - 1];
-                const needed = newBlockTime + newTurnaround;
-                if (gap < needed) {
-                    const arrH = Math.floor((sortedMinutes[i - 1] + newBlockTime) / 60) % 24;
-                    const arrM = (sortedMinutes[i - 1] + newBlockTime) % 60;
-                    errors.push(
-                        `${newAc.registration} turnaround conflict on schedule #${sched.id}: arrives ${String(arrH).padStart(2, '0')}:${String(arrM).padStart(2, '0')}, needs ${newTurnaround}min ground time, but next departure at ${String(Math.floor(sortedMinutes[i] / 60)).padStart(2, '0')}:${String(sortedMinutes[i] % 60).padStart(2, '0')}`
-                    );
-                    break;
-                }
-            }
+        } else if (!nextLoc && newAc.currentLocation && newAc.currentLocation !== earliestRouteOrigin && !newAc.currentLocation.startsWith('airborne:')) {
+            errors.push(`${newAc.registration} is at ${newAc.currentLocation} — must be at ${earliestRouteOrigin}`);
         }
     }
 
-    // Scheduling Conflict: Does newAc already have schedules that overlap with the ones it is inheriting?
-    const existingScheds = state.schedules.filter(s => s.aircraftId === newAircraftId && s.active);
-    for (const existing of existingScheds) {
-        for (const incomingSched of affectedSchedules) {
-            const incomingRoute = getRouteById(incomingSched.routeId);
-            const newBlockTime = calculateBlockTime(incomingRoute.distance, newAc.type);
-
-            for (const newTime of incomingSched.departureTimes) {
-                const newDepMin = newTime.hour * 60 + newTime.minute;
-                const newReturnMin = newDepMin + newBlockTime;
-
-                for (const exTime of existing.departureTimes) {
-                    const exDepMin = exTime.hour * 60 + exTime.minute;
-                    const exReturnMin = exDepMin + existing.blockTimeMinutes;
-
-                    const intervalsA = [
-                        { start: newDepMin, end: newReturnMin },
-                        { start: newDepMin + 1440, end: newReturnMin + 1440 },
-                        { start: newDepMin - 1440, end: newReturnMin - 1440 }
-                    ];
-
-                    let overlap = false;
-                    for (const intA of intervalsA) {
-                        if (intA.start < exReturnMin && exDepMin < intA.end) {
-                            overlap = true;
-                            break;
-                        }
-                    }
-                    if (overlap) {
-                        errors.push(
-                            `Swap conflict: ${newAc.registration} is already scheduled departing at ${String(exTime.hour).padStart(2, '0')}:${String(exTime.minute).padStart(2, '0')}. Conflicts with inherited schedule at ${String(newTime.hour).padStart(2, '0')}:${String(newTime.minute).padStart(2, '0')}.`
-                        );
-                    }
-                }
-            }
-        }
-    }
+    // Use Rotation Engine to validate if new aircraft can physically take over this entire chain
+    const rotationErrors = validateAircraftRotationChain(newAircraftId, extraLegs, null, null);
+    rotationErrors.forEach(err => errors.push(err));
 
     if (errors.length > 0) return { success: false, errors };
 
@@ -587,70 +469,6 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
     return { success: true, errors: [], swapped };
 }
 
-/**
- * Projects where an aircraft will be at a given departure time within a daily schedule.
- * Walks through all active scheduled flights for this aircraft sorted by departure time,
- * and determines the location after the last flight that would have arrived before proposedDepMinute.
- *
- * @param {number} aircraftId
- * @param {number} proposedDepMinute - minute of day (0-1439) for the proposed departure
- * @param {number|null} excludeScheduleId - schedule to exclude (for edit mode)
- * @returns {string} projected IATA location code, or "airborne" if mid-flight
- */
-export function getProjectedLocation(aircraftId, proposedDepMinute, excludeScheduleId) {
-    const state = getState();
-    const aircraft = state.fleet.find(f => f.id === aircraftId);
-    if (!aircraft) return null;
-
-    // Start with the aircraft's current physical location
-    let location = aircraft.currentLocation;
-    if (!location || location.startsWith('airborne:')) {
-        // If airborne right now, we can't reliably project — let the flight complete
-        return location || null;
-    }
-
-    // Gather all scheduled flights for this aircraft (excluding the one being edited)
-    const schedules = state.schedules.filter(
-        s => s.aircraftId === aircraftId && s.active && s.id !== excludeScheduleId
-    );
-
-    // Build a sorted list of (depMinute, arrivalMinute, destination) for the day
-    const dailyFlights = [];
-    for (const sched of schedules) {
-        const route = getRouteById(sched.routeId);
-        if (!route) continue;
-        for (const t of sched.departureTimes) {
-            const depMin = t.hour * 60 + t.minute;
-            const arrMin = depMin + sched.blockTimeMinutes;
-            dailyFlights.push({
-                depMinute: depMin,
-                arrivalMinute: arrMin,
-                origin: route.origin,
-                destination: route.destination
-            });
-        }
-    }
-
-    // Sort by departure time
-    dailyFlights.sort((a, b) => a.depMinute - b.depMinute);
-
-    // Walk through flights that depart before the proposed time
-    for (const flight of dailyFlights) {
-        if (flight.depMinute >= proposedDepMinute) {
-            // This flight departs at or after our proposed time — stop here
-            break;
-        }
-        if (flight.arrivalMinute <= proposedDepMinute) {
-            // Flight has arrived before proposed departure — aircraft is at destination
-            location = flight.destination;
-        } else {
-            // Flight departed but hasn't arrived yet — aircraft is airborne
-            return 'airborne';
-        }
-    }
-
-    return location;
-}
 
 function formatBankTime(t) {
     return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;

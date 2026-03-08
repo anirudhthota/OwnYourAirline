@@ -139,6 +139,12 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - **Task 3: Return-Leg Physical Validation** — Patched `validateScheduleParams` to accept an `assumedStartLocation` parameter natively allowing bidirectional validation to project aircraft location exactly at the outbound destination prior to return flight departure.
 - **Task 4: Fare Slider Live Preview** — Wired the custom pricing slider tightly to engine elasticity algorithms projecting Ticket Price, Demand, Load Factor, and Revenue live without requiring route confirmation.
 
+### Session I (Aircraft Rotation System V1)
+
+- **Task 1: Core Rotation Engine** — Created `rotationEngine.js` to dynamically derive 24-hour multi-leg aircraft schedules (e.g. A→B→C) purely from existing states without a persistent database. Added `buildAircraftRotationChain` and `validateAircraftRotationChain`.
+- **Task 2: Engine Integration** — Integrated `validateAircraftRotationChain` into `scheduler.js`'s `validateScheduleParams` and `swapAircraftOnRoute`. Ensures physical location continuity, turnaround limits, and maintenance constraints across discrete routed legs.
+- **Task 3: UI Iteration** — Updated `FleetView.js` and `AircraftDetailView.js` to natively digest abstract rotation chains into 24-hour visual timelines reflecting continuous sequence operations. Updated `SchedulePanel.js` to evaluate schedule proposals explicitly against sequential aircraft locations dynamically.
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs
