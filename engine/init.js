@@ -45,6 +45,10 @@ export function initFromSave() {
     for (const route of state.routes) {
         if (route.fareMultiplier === undefined) route.fareMultiplier = 1.0;
     }
+    // Ensure daysOfWeek exists for older saves (default: daily)
+    for (const sched of state.schedules) {
+        if (!sched.daysOfWeek) sched.daysOfWeek = [0, 1, 2, 3, 4, 5, 6];
+    }
     // Ensure maintenance fields exist for older saves
     for (const ac of state.fleet) {
         if (ac.hoursSinceACheck === undefined) ac.hoursSinceACheck = 0;

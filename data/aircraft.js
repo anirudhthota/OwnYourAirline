@@ -204,6 +204,30 @@ export function getAircraftByCategory(category) {
     return AIRCRAFT_TYPES.filter(a => a.category === category);
 }
 
+// === Mission Band Model ===
+export const MISSION_BANDS = [
+    { key: 'SHORT', max: 1500, label: 'Short Haul' },
+    { key: 'MEDIUM', max: 4000, label: 'Medium Haul' },
+    { key: 'LONG', max: 9000, label: 'Long Haul' },
+    { key: 'ULTRA_LONG', max: Infinity, label: 'Ultra Long Haul' }
+];
+
+export function getMissionBand(distanceKm) {
+    for (const band of MISSION_BANDS) {
+        if (distanceKm <= band.max) return band;
+    }
+    return MISSION_BANDS[MISSION_BANDS.length - 1];
+}
+
+// Turnaround matrix: [category][bandKey] → minutes
+const TURNAROUND_MATRIX = {
+    'Regional': { SHORT: 20, MEDIUM: 30, LONG: 30, ULTRA_LONG: 30 },
+    'Narrow-body': { SHORT: 35, MEDIUM: 45, LONG: 55, ULTRA_LONG: 60 },
+    'Wide-body': { SHORT: 60, MEDIUM: 75, LONG: 90, ULTRA_LONG: 105 },
+    'Super Heavy': { SHORT: 90, MEDIUM: 105, LONG: 120, ULTRA_LONG: 140 }
+};
+
+// Legacy flat defaults (used when routeDistance is omitted)
 export const TURNAROUND_MINUTES = {
     'Regional': 25,
     'Narrow-body': 45,
@@ -211,9 +235,22 @@ export const TURNAROUND_MINUTES = {
     'Super Heavy': 120
 };
 
-export function getTurnaroundTime(aircraftType) {
+/**
+ * Get turnaround time in minutes.
+ * @param {string} aircraftType - e.g. 'A320neo'
+ * @param {number} [routeDistance] - route distance in km. If omitted, uses legacy flat default.
+ * @returns {number} turnaround minutes
+ */
+export function getTurnaroundTime(aircraftType, routeDistance) {
     const ac = getAircraftByType(aircraftType);
     if (!ac) return 45;
+
+    if (routeDistance != null) {
+        const band = getMissionBand(routeDistance);
+        const matrix = TURNAROUND_MATRIX[ac.category];
+        if (matrix && matrix[band.key] != null) return matrix[band.key];
+    }
+
     return TURNAROUND_MINUTES[ac.category] || 45;
 }
 

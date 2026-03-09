@@ -173,8 +173,9 @@ function renderScheduleList() {
                 </div>
                 <div class="sched-card-details">
                     <span>Block time: ${Math.floor(sched.blockTimeMinutes / 60)}h ${sched.blockTimeMinutes % 60}m</span>
-                    <span>Turnaround: ${aircraft ? getTurnaroundTime(aircraft.type) : '?'}m</span>
+                    <span>Turnaround: ${aircraft && route ? getTurnaroundTime(aircraft.type, route.distance) : '?'}m</span>
                     <span>Departures: ${times || 'None'}</span>
+                    <span>Days: ${formatDaysOfWeek(sched.daysOfWeek)}</span>
                 </div>
                 <div class="sched-card-actions">
                     <button class="btn-sm btn-accent" data-edit-sched="${sched.id}">Edit</button>
@@ -197,4 +198,13 @@ function renderScheduleList() {
             renderScheduleList();
         });
     });
+}
+
+function formatDaysOfWeek(days) {
+    if (!days || days.length === 7) return 'Daily';
+    if (days.length === 0) return 'None';
+    const labels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    if (JSON.stringify([...days].sort()) === JSON.stringify([1, 2, 3, 4, 5])) return 'Mon–Fri';
+    if (JSON.stringify([...days].sort()) === JSON.stringify([0, 6])) return 'Sat–Sun';
+    return days.map(d => labels[d]).join(', ');
 }

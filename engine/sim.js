@@ -118,6 +118,12 @@ function processFlightDepartures() {
     for (const schedule of state.schedules) {
         if (!schedule.active) continue;
 
+        // Day-of-week check: skip if schedule doesn't run today
+        if (schedule.daysOfWeek && schedule.daysOfWeek.length < 7) {
+            const currentDayOfWeek = Math.floor(state.clock.totalMinutes / MINUTES_PER_DAY) % 7;
+            if (!schedule.daysOfWeek.includes(currentDayOfWeek)) continue;
+        }
+
         const route = getRouteById(schedule.routeId);
         if (!route || !route.active) continue;
 

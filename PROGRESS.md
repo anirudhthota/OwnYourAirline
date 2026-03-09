@@ -171,6 +171,43 @@ All Phase 2 work across Sessions A, B, C1, and C2 is complete:
 - **Index Helpers** — New `engine/indexHelpers.js` provides lazy-rebuild indexed lookups: `getSchedulesByRouteIndexed`, `getSchedulesByAircraftIndexed`, `getRoutesByOrigin`, `getRoutesByDestination`, `getRouteByIdIndexed`. Dirty flags are set by mutation functions in `scheduler.js` and `routeEngine.js`.
 - **Engine Wiring** — `scheduler.js`, `routeEngine.js`, `rotationEngine.js`, `transfers.js` all use indexed helpers. `getSchedulesByRoute`/`getSchedulesByAircraft` in `scheduler.js` delegate to indexed versions for backward compat.
 
+### Phase 3.6 — Route Planning & Scheduling Overhaul
+
+**Turnaround Model V2:**
+- Replaced flat per-category turnaround with mission-band-aware matrix in `aircraft.js`.
+- Mission bands: Short Haul (≤1500km), Medium Haul (≤4000km), Long Haul (≤9000km), Ultra Long Haul (>9000km).
+- `getTurnaroundTime(aircraftType, routeDistance)` — distance is optional for backward compat.
+- Matrix varies by aircraft category × mission band (e.g., Narrow-body Short: 35m, Long: 55m).
+
+**Planning Engine:**
+- New `engine/planningEngine.js` — read-only, never mutates state.
+- `evaluateAircraftFeasibility(routeId, outDepMinute)` — evaluates all fleet aircraft against route+timing.
+- Classifies each as: Available, Available (Adjusted), Requires 2 Aircraft, Blocked (Location/Turnaround/Maintenance/Overlap/Range).
+- `recalculateTimingForAircraft(routeDistance, aircraftType, outDepMinute)` — aircraft-specific return timing.
+
+**Validation Separation:**
+- `validateAircraftRotationChain` now returns `{ errors, warnings }` instead of flat array.
+- Hard errors (block creation): within-day location gaps, insufficient turnaround, maintenance, overlap.
+- Soft warnings (advisory): overnight positioning, tight overnight turnaround, multi-aircraft requirement.
+- "Overnight Rotation Broken" no longer fires as a hard error.
+- `validateScheduleParams` returns `{ errors, warnings }`, propagated to UI.
+
+**Weekly Schedule Model:**
+- Schedule objects have `daysOfWeek: [0,1,2,3,4,5,6]` field (0=Sun..6=Sat).
+- `sim.js` checks `daysOfWeek` before dispatching flights.
+- `init.js` migration defaults older saves to daily.
+- SchedulePanel has pill-button day selector.
+- SchedulesView shows day summary (Daily, Mon–Fri, etc.).
+
+**SchedulePanel V2:**
+- Reversed workflow: timing first (Step 1) → aircraft feasibility (Step 2).
+- Aircraft dropdown replaced with feasibility table grouped by fit status.
+- Provisional return timing derived using median aircraft type when none selected.
+- After aircraft selection, timing recalculated per aircraft's block time + turnaround.
+- Fare preview fixed: uses `max(1, frequency)` for seats so LF/revenue show during creation.
+- Warnings shown non-blocking below errors.
+- Days-of-week pill selector with Toggle All button.
+
 ### Phase 3 Roadmap
 
 - **Maintenance System** — Aircraft need periodic maintenance, downtime, repair costs

@@ -59,22 +59,22 @@ export function buildAircraftRotationChain(aircraftId, dayOffset = 0, excludeSch
  *                            Format: [{ origin, destination, depMinute, blockTime }]
  * @param {number|null} excludeScheduleId - Optional schedule to ignore.
  * @param {string|null} assumedStartLocation - Assumed starting location for the first leg if chain is empty or for paired overrides.
- * @returns {Array} Array of error message strings. Empty if valid.
+ * @returns {{ errors: string[], warnings: string[] }} Hard errors block creation; warnings are advisory.
  */
 export function validateAircraftRotationChain(aircraftId, extraLegs = [], excludeScheduleId = null, assumedStartLocation = null) {
     const state = getState();
     const errors = [];
+    const warnings = [];
 
     // 1. Build the base chain and mix in extra legs
     const baseChain = buildAircraftRotationChain(aircraftId, 0, excludeScheduleId);
     const aircraft = state.fleet.find(f => f.id === aircraftId);
-    if (!aircraft) return ['Aircraft not found.'];
-
-    const turnaround = getTurnaroundTime(aircraft.type);
+    if (!aircraft) return { errors: ['Aircraft not found.'], warnings: [] };
 
     const fullChain = [...baseChain];
 
     for (const extra of extraLegs) {
+        const legTurnaround = getTurnaroundTime(aircraft.type, extra.routeDistance);
         fullChain.push({
             scheduleId: 'proposed',
             routeId: 'proposed',
@@ -82,7 +82,7 @@ export function validateAircraftRotationChain(aircraftId, extraLegs = [], exclud
             destination: extra.destination,
             depMinute: extra.depMinute,
             arrMinute: extra.depMinute + extra.blockTime,
-            turnaround: turnaround,
+            turnaround: legTurnaround,
             isProposed: true
         });
     }
@@ -95,7 +95,7 @@ export function validateAircraftRotationChain(aircraftId, extraLegs = [], exclud
         if (aircraft.status === 'maintenance' && aircraft.maintenanceReleaseTime && fullChain.length > 0) {
             checkMaintenanceConflict(aircraft, fullChain[0].depMinute, errors, state.clock.totalMinutes);
         }
-        return errors;
+        return { errors, warnings };
     }
 
     // 2. Validate Turnaround and Physical Location Continuity across the chain
@@ -107,46 +107,48 @@ export function validateAircraftRotationChain(aircraftId, extraLegs = [], exclud
             checkMaintenanceConflict(aircraft, currentLeg.depMinute, errors, state.clock.totalMinutes);
         }
 
-        // The "next" leg wraps around to the beginning for a daily cycle
-        const nextIdx = (i + 1) % fullChain.length;
-        const nextLeg = fullChain[nextIdx];
+        const isLastLeg = (i === fullChain.length - 1);
 
-        // Special case: if this is a proposed leg and there is an assumedStartLocation, use it if it's the very first leg being checked against an empty base chain, or directly overriding.
-        // For simplicity, we just inject a check that if assumedStartLocation is provided and we are transitioning into the first proposed leg, we accept it.
-        let requireLink = true;
-        if (nextLeg.isProposed && assumedStartLocation !== null && nextLeg.origin === assumedStartLocation) {
-            // If the UI explicitly says "assume it starts here" (e.g. return leg validation), we skip the origin link check for this specific proposed leg.
-            // Only if the current leg isn't providing a valid link itself that would conflict.
-            requireLink = false;
-        }
+        // For within-day validation, only check consecutive legs (not wrap-around)
+        if (!isLastLeg) {
+            const nextLeg = fullChain[i + 1];
 
-        // 2a. Location Continuity
-        if (requireLink && currentLeg.destination !== nextLeg.origin) {
-            let msg = `Rotation broken: Arrives at ${currentLeg.destination} at ${formatTime(currentLeg.arrMinute)}, but next flight departs ${nextLeg.origin} at ${formatTime(nextLeg.depMinute)}.`;
-            if (nextIdx === 0) {
-                msg = `Overnight rotation broken: End of day arrives at ${currentLeg.destination}, but start of day departs ${nextLeg.origin}.`;
+            // Special case: assumed start location for proposed legs
+            let requireLink = true;
+            if (nextLeg.isProposed && assumedStartLocation !== null && nextLeg.origin === assumedStartLocation) {
+                requireLink = false;
             }
-            if (!errors.includes(msg)) errors.push(msg);
-        }
 
-        // 2b. Turnaround Padding
-        const arrivalPlusTurn = currentLeg.arrMinute + currentLeg.turnaround;
+            // 2a. Location Continuity (HARD ERROR for within-day gaps)
+            if (requireLink && currentLeg.destination !== nextLeg.origin) {
+                const msg = `Rotation broken: Arrives at ${currentLeg.destination} at ${formatTime(currentLeg.arrMinute)}, but next flight departs ${nextLeg.origin} at ${formatTime(nextLeg.depMinute)}.`;
+                if (!errors.includes(msg)) errors.push(msg);
+            }
 
-        let gap;
-        if (nextIdx === 0) {
-            // Gap across midnight
-            gap = (nextLeg.depMinute + 1440) - currentLeg.arrMinute;
+            // 2b. Turnaround Padding (HARD ERROR for within-day gaps)
+            const gap = nextLeg.depMinute - currentLeg.arrMinute;
+            if (gap < currentLeg.turnaround) {
+                const msg = `Insufficient turnaround: Arrives ${formatTime(currentLeg.arrMinute)}, needs ${currentLeg.turnaround}m. Next departure at ${formatTime(nextLeg.depMinute)} is too early.`;
+                if (!errors.includes(msg)) errors.push(msg);
+            }
         } else {
-            gap = nextLeg.depMinute - currentLeg.arrMinute;
-        }
+            // Last leg → first leg: overnight wrap-around (SOFT WARNING only)
+            const firstLeg = fullChain[0];
+            if (currentLeg.destination !== firstLeg.origin) {
+                const msg = `Overnight positioning: Ends day at ${currentLeg.destination}, starts next day at ${firstLeg.origin}. May require repositioning.`;
+                if (!warnings.includes(msg)) warnings.push(msg);
+            }
 
-        if (gap < currentLeg.turnaround) {
-            const msg = `Insufficient turnaround: Arrives ${formatTime(currentLeg.arrMinute)}, needs ${currentLeg.turnaround}m. Next departure at ${formatTime(nextLeg.depMinute)} is too early.`;
-            if (!errors.includes(msg)) errors.push(msg);
+            // Overnight turnaround gap — advisory only
+            const overnightGap = (firstLeg.depMinute + 1440) - currentLeg.arrMinute;
+            if (overnightGap < currentLeg.turnaround) {
+                const msg = `Tight overnight turnaround: Only ${overnightGap}m between last arrival and first departure (needs ${currentLeg.turnaround}m).`;
+                if (!warnings.includes(msg)) warnings.push(msg);
+            }
         }
     }
 
-    return errors;
+    return { errors, warnings };
 }
 
 function checkMaintenanceConflict(aircraft, depMinute, errors, currentSimMinute) {

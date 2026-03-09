@@ -90,16 +90,16 @@ export function deleteBank(bankId) {
     return true;
 }
 
-export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId, flightNumbers) {
+export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId, flightNumbers, daysOfWeek = null) {
     const state = getState();
 
     // Validate all params first — no state mutation until all checks pass
-    const errors = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId);
-    if (errors.length > 0) {
-        for (const err of errors) {
+    const validation = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId);
+    if (validation.errors.length > 0) {
+        for (const err of validation.errors) {
             addLogEntry(err, 'error');
         }
-        return { schedule: null, errors };
+        return { schedule: null, errors: validation.errors, warnings: validation.warnings };
     }
 
     const route = getRouteById(routeId);
@@ -133,6 +133,7 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
         departureTimes: times,
         flightNumbers: fnums,
         blockTimeMinutes: blockTime,
+        daysOfWeek: daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
         active: true,
         createdDate: state.clock.totalMinutes
     };
@@ -141,8 +142,8 @@ export function createSchedule(routeId, aircraftId, mode, departureTimes, bankId
     route.schedules.push(schedule.id);
     markSchedulesDirty();
 
-    addLogEntry(`Schedule created: ${route.origin}→${route.destination} with ${acData.type}, ${times.length} daily departure(s)`, 'schedule');
-    return { schedule, errors: [] };
+    addLogEntry(`Schedule created: ${route.origin}→${route.destination} with ${acData.type}, ${times.length} departure(s)`, 'schedule');
+    return { schedule, errors: [], warnings: validation.warnings };
 }
 
 export function deleteSchedule(scheduleId) {
@@ -181,17 +182,18 @@ export function updateScheduleDepartures(scheduleId, newTimes) {
 export function validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, excludeScheduleId, assumedStartLocation = null) {
     const state = getState();
     const errors = [];
+    const warnings = [];
 
     const route = getRouteById(routeId);
     if (!route) {
         errors.push('Route not found');
-        return errors;
+        return { errors, warnings };
     }
 
     const aircraft = state.fleet.find(f => f.id === aircraftId);
     if (!aircraft) {
         errors.push('Aircraft not found');
-        return errors;
+        return { errors, warnings };
     }
 
     const acData = getAircraftByType(aircraft.type);
@@ -239,11 +241,13 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
             origin: route.origin,
             destination: route.destination,
             depMinute: t.hour * 60 + t.minute,
-            blockTime: blockTime
+            blockTime: blockTime,
+            routeDistance: route.distance
         }));
 
-        const rotationErrors = validateAircraftRotationChain(aircraftId, extraLegs, excludeScheduleId, assumedStartLocation);
-        rotationErrors.forEach(err => errors.push(err));
+        const rotationResult = validateAircraftRotationChain(aircraftId, extraLegs, excludeScheduleId, assumedStartLocation);
+        rotationResult.errors.forEach(err => errors.push(err));
+        rotationResult.warnings.forEach(w => warnings.push(w));
     } else if (aircraft.currentLocation && aircraft.currentLocation !== route.origin && !aircraft.currentLocation.startsWith('airborne:')) {
         // Fallback for banked mode where times aren't resolved yet
         errors.push(`${aircraft.registration} is at ${aircraft.currentLocation} — cannot depart ${route.origin}`);
@@ -257,15 +261,15 @@ export function validateScheduleParams(routeId, aircraftId, mode, departureTimes
     // Min aircraft check
     if (acData && times.length > 0) {
         const blockTime = calculateBlockTime(route.distance, aircraft.type);
-        const turnaround = getTurnaroundTime(aircraft.type);
+        const turnaround = getTurnaroundTime(aircraft.type, route.distance);
         const roundTrip = blockTime * 2 + turnaround * 2;
         const minAc = calculateMinAircraft(route.distance, aircraft.type, times.length);
         if (minAc > 1) {
-            errors.push(`This route requires at least ${minAc} aircraft for ${times.length} daily departure(s). Round trip: ${Math.floor(roundTrip / 60)}h${roundTrip % 60}m exceeds 24 hours for one aircraft.`);
+            warnings.push(`This route likely requires ${minAc} aircraft for ${times.length} daily departure(s). Round trip: ${Math.floor(roundTrip / 60)}h${roundTrip % 60}m.`);
         }
     }
 
-    return errors;
+    return { errors, warnings };
 }
 
 export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureTimes, bankId, flightNumbers) {
@@ -277,9 +281,9 @@ export function updateSchedule(scheduleId, routeId, aircraftId, mode, departureT
     }
 
     // Validate all params before mutating state — exclude this schedule from conflict checks
-    const errors = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, scheduleId);
-    if (errors.length > 0) {
-        for (const err of errors) {
+    const validation = validateScheduleParams(routeId, aircraftId, mode, departureTimes, bankId, scheduleId);
+    if (validation.errors.length > 0) {
+        for (const err of validation.errors) {
             addLogEntry(err, 'error');
         }
         return null;
@@ -436,7 +440,8 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
                 origin: schedRoute.origin,
                 destination: schedRoute.destination,
                 depMinute: depMin,
-                blockTime: newBlockTime
+                blockTime: newBlockTime,
+                routeDistance: schedRoute.distance
             });
         }
     }
@@ -454,8 +459,9 @@ export function swapAircraftOnRoute(routeId, oldAircraftId, newAircraftId) {
     }
 
     // Use Rotation Engine to validate if new aircraft can physically take over this entire chain
-    const rotationErrors = validateAircraftRotationChain(newAircraftId, extraLegs, null, null);
-    rotationErrors.forEach(err => errors.push(err));
+    const rotationResult = validateAircraftRotationChain(newAircraftId, extraLegs, null, null);
+    rotationResult.errors.forEach(err => errors.push(err));
+    // Swap warnings are non-blocking — ignore for swap validation
 
     if (errors.length > 0) return { success: false, errors };
 

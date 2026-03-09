@@ -184,11 +184,10 @@ function renderFleetList() {
                     <span class="fleet-reg" data-reg-display="${ac.id}">${ac.registration}</span>
                     <button class="fleet-rename-btn" data-rename="${ac.id}" title="Rename tail number">\u270E</button>
                     <span class="fleet-type">${ac.type}</span>
-                    <span class="fleet-status status-${ac.status}">${
-                        ac.status === 'in_flight' ? 'BUSY' :
-                        ac.status === 'maintenance_due' ? 'AVAILABLE' :
-                        ac.status.toUpperCase()
-                    }</span>
+                    <span class="fleet-status status-${ac.status}">${ac.status === 'in_flight' ? 'BUSY' :
+                ac.status === 'maintenance_due' ? 'AVAILABLE' :
+                    ac.status.toUpperCase()
+            }</span>
                     <span class="fleet-location">${formatLocation(ac)}</span>
                 </div>
                 <div class="fleet-card-details">
@@ -198,21 +197,21 @@ function renderFleetList() {
                     <span>${Math.round(ac.totalFlightHours)} flight hrs</span>
                     <span>${schedules.length} schedule(s)</span>
                 </div>
-                ${ac.status === 'maintenance_due' ? 
-                    `<div class="fleet-maintenance-warning" style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">
+                ${ac.status === 'maintenance_due' ?
+                `<div class="fleet-maintenance-warning" style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">
                         ${ac.pendingCheckType || 'Unknown'}-Check Due \u2013 ${Math.ceil(ac.graceHoursRemaining || 0)}h Grace Remaining
                     </div>` : ''}
-                ${ac.status === 'maintenance' ? 
-                    `<div class="fleet-maintenance-critical" style="color: #f44336; font-weight: bold; margin-bottom: 8px;">
+                ${ac.status === 'maintenance' ?
+                `<div class="fleet-maintenance-critical" style="color: #f44336; font-weight: bold; margin-bottom: 8px;">
                         Under Maintenance${ac.maintenanceReleaseTime ? ' \u2013 ' + Math.ceil((ac.maintenanceReleaseTime - state.clock.totalMinutes) / 60) + 'h remaining' : ''}
                     </div>` : ''}
                 <div class="fleet-card-actions">
-                    ${ac.status === 'maintenance_due' ? 
-                        `<button class="btn-sm btn-accent" data-start-maint="${ac.id}">Perform Maintenance</button>` : ''}
+                    ${ac.status === 'maintenance_due' ?
+                `<button class="btn-sm btn-accent" data-start-maint="${ac.id}">Perform Maintenance</button>` : ''}
                     ${ac.ownership === 'OWNED'
-                        ? `<button class="btn-sm btn-danger" data-sell="${ac.id}">Sell</button>`
-                        : `<button class="btn-sm btn-danger" data-return="${ac.id}">Return Lease</button>`
-                    }
+                ? `<button class="btn-sm btn-danger" data-sell="${ac.id}">Sell</button>`
+                : `<button class="btn-sm btn-danger" data-return="${ac.id}">Return Lease</button>`
+            }
                 </div>
             </div>
         `;
@@ -276,7 +275,7 @@ function renderFleetList() {
             const id = parseInt(btn.dataset.startMaint);
             const aircraft = state.fleet.find(f => f.id === id);
             if (!aircraft) return;
-            
+
             showConfirm(
                 'Start Maintenance',
                 `Are you sure you want to perform the <strong>${aircraft.pendingCheckType}-Check</strong> for ${aircraft.registration}?<br>Active schedules will be unassigned.`,
@@ -404,8 +403,8 @@ function renderUsedMarket() {
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;font-family:var(--font-mono);">Refreshes in ${daysUntilRefresh} days | ${market.listings.length} aircraft available</div>
         <div class="shop-grid">
             ${market.listings.map(listing => {
-                const condColor = listing.condition === 'Good' ? 'var(--accent-green)' : 'var(--accent-yellow)';
-                return `
+        const condColor = listing.condition === 'Good' ? 'var(--accent-green)' : 'var(--accent-yellow)';
+        return `
                     <div class="shop-card" ${listing.featured ? 'style="border-color:var(--accent-green);"' : ''}>
                         ${listing.featured ? '<div style="color:var(--accent-green);font-family:var(--font-mono);font-size:10px;text-transform:uppercase;margin-bottom:4px;">Featured Deal</div>' : ''}
                         <div class="shop-card-header">
@@ -430,7 +429,7 @@ function renderUsedMarket() {
                         </div>
                     </div>
                 `;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 
@@ -439,7 +438,7 @@ function renderUsedMarket() {
             const id = parseInt(btn.dataset.buyUsed);
             const listing = market.listings.find(l => l.id === id);
             if (!listing) return;
-            
+
             const state = getState();
             const processPurchase = (ferry) => {
                 if (purchaseUsedAircraft(id, ferry)) {
@@ -450,10 +449,10 @@ function renderUsedMarket() {
             };
 
             const baseMsg = `<strong>${listing.type}</strong> (${listing.category})<br>` +
-                            `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
-                            `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
-                            `Price: <strong>$${formatMoney(listing.price)}</strong> (${Math.round(listing.priceMultiplier * 100)}% of new)<br>` +
-                            `Location: <strong>${listing.location}</strong>`;
+                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                `Price: <strong>$${formatMoney(listing.price)}</strong> (${Math.round(listing.priceMultiplier * 100)}% of new)<br>` +
+                `Location: <strong>${listing.location}</strong>`;
 
             if (listing.location === state.config.hubAirport) {
                 showConfirm('Purchase Used Aircraft', baseMsg, () => processPurchase(false));
@@ -476,7 +475,7 @@ function renderUsedMarket() {
                     <button class="btn-secondary modal-cancel-btn" style="width: 100%; border-color: transparent;">Cancel</button>
                 </div>
             `);
-            
+
             modalBody.querySelector('.modal-ferry-btn').addEventListener('click', () => { closeModal(); processPurchase(true); });
             modalBody.querySelector('.modal-keep-btn').addEventListener('click', () => { closeModal(); processPurchase(false); });
             modalBody.querySelector('.modal-cancel-btn').addEventListener('click', () => closeModal());
@@ -488,7 +487,7 @@ function renderUsedMarket() {
             const id = parseInt(btn.dataset.leaseUsed);
             const listing = market.listings.find(l => l.id === id);
             if (!listing) return;
-            
+
             const state = getState();
             const deposit = listing.leasePrice * LEASE_DEPOSIT_MONTHS;
             const processLease = (ferry) => {
@@ -500,11 +499,11 @@ function renderUsedMarket() {
             };
 
             const baseMsg = `<strong>${listing.type}</strong> (${listing.category})<br>` +
-                            `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
-                            `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
-                            `Lease: <strong>$${formatMoney(listing.leasePrice)}/month</strong><br>` +
-                            `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong><br>` +
-                            `Location: <strong>${listing.location}</strong>`;
+                `${listing.seats} seats | ${listing.rangeKm.toLocaleString()} km range<br>` +
+                `${listing.ageYears} years old | ${listing.hoursFlown.toLocaleString()} hrs | ${listing.condition}<br><br>` +
+                `Lease: <strong>$${formatMoney(listing.leasePrice)}/month</strong><br>` +
+                `Deposit (${LEASE_DEPOSIT_MONTHS} months): <strong>$${formatMoney(deposit)}</strong><br>` +
+                `Location: <strong>${listing.location}</strong>`;
 
             if (listing.location === state.config.hubAirport) {
                 showConfirm('Lease Used Aircraft', baseMsg, () => processLease(false));
@@ -527,7 +526,7 @@ function renderUsedMarket() {
                     <button class="btn-secondary modal-cancel-btn" style="width: 100%; border-color: transparent;">Cancel</button>
                 </div>
             `);
-            
+
             modalBody.querySelector('.modal-ferry-btn').addEventListener('click', () => { closeModal(); processLease(true); });
             modalBody.querySelector('.modal-keep-btn').addEventListener('click', () => { closeModal(); processLease(false); });
             modalBody.querySelector('.modal-cancel-btn').addEventListener('click', () => closeModal());
@@ -615,10 +614,10 @@ function renderAirportsSubPanel() {
         <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:6px;padding:14px;">
             <h3 class="section-title" style="margin-top:0;">Airports (${airportData.length})</h3>
             ${airportData.map(d => {
-                const levelColor = d.level >= 4 ? 'var(--accent-red)' : d.level === 3 ? 'var(--accent-yellow)' : 'var(--accent-green)';
-                const peakUsage = Object.values(d.slotUsage).length > 0 ? Math.max(...Object.values(d.slotUsage)) : 0;
-                const availPct = d.slotsPerHour > 0 ? Math.round((1 - peakUsage / d.slotsPerHour) * 100) : 100;
-                return `
+        const levelColor = d.level >= 4 ? 'var(--accent-red)' : d.level === 3 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+        const peakUsage = Object.values(d.slotUsage).length > 0 ? Math.max(...Object.values(d.slotUsage)) : 0;
+        const availPct = d.slotsPerHour > 0 ? Math.round((1 - peakUsage / d.slotsPerHour) * 100) : 100;
+        return `
                     <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-color);font-size:13px;">
                         <span style="font-family:var(--font-mono);font-weight:700;color:var(--accent-blue);min-width:36px;">${d.iata}</span>
                         <span style="color:${levelColor};font-family:var(--font-mono);font-size:11px;min-width:80px;">L${d.level} ${d.levelInfo.name}</span>
@@ -628,7 +627,7 @@ function renderAirportsSubPanel() {
                         ${d.isHub ? '<span style="color:var(--accent-blue);font-family:var(--font-mono);font-size:10px;background:rgba(0,170,255,0.1);padding:1px 6px;border-radius:3px;">HUB</span>' : ''}
                     </div>
                 `;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 }
@@ -641,7 +640,7 @@ function renderRouteCreator() {
     const aircraftOptions = state.fleet.map(ac => {
         const statusLabel = ac.status === 'available' ? '\u2705 Available'
             : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
-            : '\uD83D\uDFE1 Busy';
+                : '\uD83D\uDFE1 Busy';
         let nextFreeLabel = '';
         if (ac.status === 'in_flight') {
             const nextFree = getAircraftNextFree(ac.id);
@@ -654,7 +653,7 @@ function renderRouteCreator() {
     }).join('');
 
     const bankOptions = state.banks.map(b =>
-        `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2,'0')}:${String(b.startTime.minute).padStart(2,'0')}-${String(b.endTime.hour).padStart(2,'0')}:${String(b.endTime.minute).padStart(2,'0')})</option>`
+        `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2, '0')}:${String(b.startTime.minute).padStart(2, '0')}-${String(b.endTime.hour).padStart(2, '0')}:${String(b.endTime.minute).padStart(2, '0')})</option>`
     ).join('');
 
     creator.innerHTML = `
@@ -931,7 +930,7 @@ function renderRouteCreator() {
         rangeDiv.classList.remove('hidden');
         if (can) {
             rangeDiv.className = 'range-check ok';
-            rangeDiv.textContent = `Range OK (${acData.rangeKm}km \u2265 ${Math.round(distance)}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            rangeDiv.textContent = `Range OK (${acData.rangeKm}km \u2265 ${Math.round(distance)}km). Block: ${Math.floor(blockTime / 60)}h${blockTime % 60}m, Turnaround: ${turnaround}m`;
         } else {
             rangeDiv.className = 'range-check fail';
             rangeDiv.textContent = `Out of range! ${acData.rangeKm}km < ${Math.round(distance)}km`;
@@ -1098,7 +1097,7 @@ function renderRouteCreator() {
                                 const gap = sorted[i] - sorted[i - 1];
                                 const needed = blockTime + turnaround;
                                 if (gap < needed) {
-                                    errors.push(`Outbound: Insufficient turnaround between departures at ${String(Math.floor(sorted[i-1]/60)).padStart(2,'0')}:${String(sorted[i-1]%60).padStart(2,'0')} and ${String(Math.floor(sorted[i]/60)).padStart(2,'0')}:${String(sorted[i]%60).padStart(2,'0')}.`);
+                                    errors.push(`Outbound: Insufficient turnaround between departures at ${String(Math.floor(sorted[i - 1] / 60)).padStart(2, '0')}:${String(sorted[i - 1] % 60).padStart(2, '0')} and ${String(Math.floor(sorted[i] / 60)).padStart(2, '0')}:${String(sorted[i] % 60).padStart(2, '0')}.`);
                                 }
                             }
                         }
@@ -1128,7 +1127,7 @@ function renderRouteCreator() {
                                 const gap = sorted[i] - sorted[i - 1];
                                 const needed = blockTime + turnaround;
                                 if (gap < needed) {
-                                    errors.push(`Return: Insufficient turnaround between departures at ${String(Math.floor(sorted[i-1]/60)).padStart(2,'0')}:${String(sorted[i-1]%60).padStart(2,'0')} and ${String(Math.floor(sorted[i]/60)).padStart(2,'0')}:${String(sorted[i]%60).padStart(2,'0')}.`);
+                                    errors.push(`Return: Insufficient turnaround between departures at ${String(Math.floor(sorted[i - 1] / 60)).padStart(2, '0')}:${String(sorted[i - 1] % 60).padStart(2, '0')} and ${String(Math.floor(sorted[i] / 60)).padStart(2, '0')}:${String(sorted[i] % 60).padStart(2, '0')}.`);
                                 }
                             }
                         }
@@ -1155,7 +1154,7 @@ function renderRouteCreator() {
                         // Find the first return departure that's after this outbound arrival
                         const matchingRet = retSorted.find(r => r >= earliestRetDep);
                         if (!matchingRet && earliestRetDep < 1440) {
-                            errors.push(`Rotation: Outbound dep ${String(Math.floor(outDep/60)).padStart(2,'0')}:${String(outDep%60).padStart(2,'0')} arrives ~${String(Math.floor(outArr/60)%24).padStart(2,'0')}:${String(outArr%60).padStart(2,'0')}, needs ${turnaround}min turnaround. No matching return departure found.`);
+                            errors.push(`Rotation: Outbound dep ${String(Math.floor(outDep / 60)).padStart(2, '0')}:${String(outDep % 60).padStart(2, '0')} arrives ~${String(Math.floor(outArr / 60) % 24).padStart(2, '0')}:${String(outArr % 60).padStart(2, '0')}, needs ${turnaround}min turnaround. No matching return departure found.`);
                             break;
                         }
                     }
@@ -1739,19 +1738,19 @@ function renderScheduleCreator() {
                 <select id="sc-aircraft">
                     <option value="">Select aircraft...</option>
                     ${state.fleet.map(ac => {
-                        const statusLabel = ac.status === 'available' ? '\u2705 Available'
-                            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
-                            : '\uD83D\uDFE1 Busy';
-                        let nextFreeLabel = '';
-                        if (ac.status === 'in_flight') {
-                            const nextFree = getAircraftNextFree(ac.id);
-                            if (nextFree != null) {
-                                const gt = getGameTime(nextFree);
-                                nextFreeLabel = ` \u2014 Free at D${((gt.week - 1) * 7 + gt.day)} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
-                            }
-                        }
-                        return `<option value="${ac.id}">${ac.registration} \u2014 ${ac.type} [${statusLabel}${nextFreeLabel}]</option>`;
-                    }).join('')}
+        const statusLabel = ac.status === 'available' ? '\u2705 Available'
+            : ac.status === 'maintenance' ? '\uD83D\uDD34 Maintenance'
+                : '\uD83D\uDFE1 Busy';
+        let nextFreeLabel = '';
+        if (ac.status === 'in_flight') {
+            const nextFree = getAircraftNextFree(ac.id);
+            if (nextFree != null) {
+                const gt = getGameTime(nextFree);
+                nextFreeLabel = ` \u2014 Free at D${((gt.week - 1) * 7 + gt.day)} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+            }
+        }
+        return `<option value="${ac.id}">${ac.registration} \u2014 ${ac.type} [${statusLabel}${nextFreeLabel}]</option>`;
+    }).join('')}
                 </select>
             </div>
             <div id="sc-range-check" class="range-check hidden"></div>
@@ -1775,7 +1774,7 @@ function renderScheduleCreator() {
                 <label>Connection Bank</label>
                 <select id="sc-bank">
                     <option value="">Select bank...</option>
-                    ${state.banks.map(b => `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2,'0')}:${String(b.startTime.minute).padStart(2,'0')}-${String(b.endTime.hour).padStart(2,'0')}:${String(b.endTime.minute).padStart(2,'0')})</option>`).join('')}
+                    ${state.banks.map(b => `<option value="${b.id}">${b.name} (${String(b.startTime.hour).padStart(2, '0')}:${String(b.startTime.minute).padStart(2, '0')}-${String(b.endTime.hour).padStart(2, '0')}:${String(b.endTime.minute).padStart(2, '0')})</option>`).join('')}
                 </select>
             </div>
             <div id="sc-validation-errors" class="validation-errors hidden"></div>
@@ -1813,9 +1812,9 @@ function renderScheduleCreator() {
         const minAc = calculateMinAircraft(route.distance, aircraft.type, 1);
         rangeCheck.classList.remove('hidden');
         if (can) {
-            let msg = `Range OK (${acData.rangeKm}km \u2265 ${route.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            let msg = `Range OK (${acData.rangeKm}km \u2265 ${route.distance}km). Block: ${Math.floor(blockTime / 60)}h${blockTime % 60}m, Turnaround: ${turnaround}m`;
             if (minAc > 1) {
-                msg += ` | Round trip: ${Math.floor(roundTripMinutes/60)}h${roundTripMinutes%60}m. This route requires at least ${minAc} aircraft for daily frequency. One aircraft takes ${Math.floor(roundTripMinutes/60)}h to complete the round trip.`;
+                msg += ` | Round trip: ${Math.floor(roundTripMinutes / 60)}h${roundTripMinutes % 60}m. This route requires at least ${minAc} aircraft for daily frequency. One aircraft takes ${Math.floor(roundTripMinutes / 60)}h to complete the round trip.`;
             }
             rangeCheck.className = 'range-check ok';
             rangeCheck.textContent = msg;
@@ -1889,13 +1888,13 @@ function renderScheduleCreator() {
             showCreatorErrors(['Select both a route and an aircraft']);
             return;
         }
-        const errors = validateScheduleParams(routeId, acId, mode, times, bankId);
-        if (errors.length === 0) {
+        const validation = validateScheduleParams(routeId, acId, mode, times, bankId);
+        if (validation.errors.length === 0) {
             const errDiv = document.getElementById('sc-validation-errors');
             errDiv.classList.remove('hidden');
             errDiv.innerHTML = '<div class="validation-ok">All checks passed. Schedule is valid.</div>';
         } else {
-            showCreatorErrors(errors);
+            showCreatorErrors(validation.errors);
         }
     });
 
@@ -2053,30 +2052,30 @@ function renderScheduleEditor(scheduleId) {
                 <select id="se-aircraft">
                     <option value="" ${!schedule.aircraftId ? 'selected' : ''}>-- Unassigned --</option>
                     ${state.fleet.map(ac => {
-                        let statusLabel = '';
-                        if (ac.status === 'maintenance') {
-                            if (ac.maintenanceReleaseTime) {
-                                const gt = getGameTime(ac.maintenanceReleaseTime);
-                                statusLabel = `\uD83D\uDD34 MAINTENANCE until Y${gt.year} M${gt.month} W${gt.week} D${gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
-                            } else {
-                                statusLabel = '\uD83D\uDD34 MAINTENANCE';
-                            }
-                        } else if (ac.status === 'in_flight') {
-                            statusLabel = '\uD83D\uDFE1 Busy';
-                        } else {
-                            statusLabel = '\u2705 Available';
-                        }
-                        
-                        let nextFreeLabel = '';
-                        if (ac.status === 'in_flight') {
-                            const nextFree = getAircraftNextFree(ac.id);
-                            if (nextFree != null) {
-                                const gt = getGameTime(nextFree);
-                                nextFreeLabel = ' \u2014 Free at D' + ((gt.week - 1) * 7 + gt.day) + ' ' + String(gt.hour).padStart(2, '0') + ':' + String(gt.minute).padStart(2, '0');
-                            }
-                        }
-                        return '<option value="' + ac.id + '"' + (ac.id === schedule.aircraftId ? ' selected' : '') + '>' + ac.registration + ' \u2014 ' + ac.type + ' [' + statusLabel + nextFreeLabel + ']</option>';
-                    }).join('')}
+        let statusLabel = '';
+        if (ac.status === 'maintenance') {
+            if (ac.maintenanceReleaseTime) {
+                const gt = getGameTime(ac.maintenanceReleaseTime);
+                statusLabel = `\uD83D\uDD34 MAINTENANCE until Y${gt.year} M${gt.month} W${gt.week} D${gt.day} ${String(gt.hour).padStart(2, '0')}:${String(gt.minute).padStart(2, '0')}`;
+            } else {
+                statusLabel = '\uD83D\uDD34 MAINTENANCE';
+            }
+        } else if (ac.status === 'in_flight') {
+            statusLabel = '\uD83D\uDFE1 Busy';
+        } else {
+            statusLabel = '\u2705 Available';
+        }
+
+        let nextFreeLabel = '';
+        if (ac.status === 'in_flight') {
+            const nextFree = getAircraftNextFree(ac.id);
+            if (nextFree != null) {
+                const gt = getGameTime(nextFree);
+                nextFreeLabel = ' \u2014 Free at D' + ((gt.week - 1) * 7 + gt.day) + ' ' + String(gt.hour).padStart(2, '0') + ':' + String(gt.minute).padStart(2, '0');
+            }
+        }
+        return '<option value="' + ac.id + '"' + (ac.id === schedule.aircraftId ? ' selected' : '') + '>' + ac.registration + ' \u2014 ' + ac.type + ' [' + statusLabel + nextFreeLabel + ']</option>';
+    }).join('')}
                 </select>
             </div>
             <div id="se-range-check" class="range-check hidden"></div>
@@ -2100,7 +2099,7 @@ function renderScheduleEditor(scheduleId) {
                 <label>Connection Bank</label>
                 <select id="se-bank">
                     <option value="">Select bank...</option>
-                    ${state.banks.map(b => '<option value="' + b.id + '"' + (b.id === schedule.bankId ? ' selected' : '') + '>' + b.name + ' (' + String(b.startTime.hour).padStart(2,'0') + ':' + String(b.startTime.minute).padStart(2,'0') + '-' + String(b.endTime.hour).padStart(2,'0') + ':' + String(b.endTime.minute).padStart(2,'0') + ')</option>').join('')}
+                    ${state.banks.map(b => '<option value="' + b.id + '"' + (b.id === schedule.bankId ? ' selected' : '') + '>' + b.name + ' (' + String(b.startTime.hour).padStart(2, '0') + ':' + String(b.startTime.minute).padStart(2, '0') + '-' + String(b.endTime.hour).padStart(2, '0') + ':' + String(b.endTime.minute).padStart(2, '0') + ')</option>').join('')}
                 </select>
             </div>
             <div id="se-validation-errors" class="validation-errors hidden"></div>
@@ -2156,9 +2155,9 @@ function renderScheduleEditor(scheduleId) {
         const minAc = calculateMinAircraft(r.distance, ac.type, 1);
         rangeCheck.classList.remove('hidden');
         if (can) {
-            let msg = `Range OK (${acData.rangeKm}km \u2265 ${r.distance}km). Block: ${Math.floor(blockTime/60)}h${blockTime%60}m, Turnaround: ${turnaround}m`;
+            let msg = `Range OK (${acData.rangeKm}km \u2265 ${r.distance}km). Block: ${Math.floor(blockTime / 60)}h${blockTime % 60}m, Turnaround: ${turnaround}m`;
             if (minAc > 1) {
-                msg += ` | Round trip: ${Math.floor(roundTripMinutes/60)}h${roundTripMinutes%60}m. Requires at least ${minAc} aircraft.`;
+                msg += ` | Round trip: ${Math.floor(roundTripMinutes / 60)}h${roundTripMinutes % 60}m. Requires at least ${minAc} aircraft.`;
             }
             rangeCheck.className = 'range-check ok';
             rangeCheck.textContent = msg;
@@ -2230,21 +2229,21 @@ function renderScheduleEditor(scheduleId) {
     // Validate button
     document.getElementById('se-validate').addEventListener('click', () => {
         const { routeId, acId, mode, times, bankId } = getEditorValues();
-        const errors = validateScheduleParams(routeId, acId, mode, times, bankId, scheduleId);
-        if (errors.length === 0) {
+        const validation = validateScheduleParams(routeId, acId, mode, times, bankId, scheduleId);
+        if (validation.errors.length === 0) {
             const errDiv = document.getElementById('se-validation-errors');
             errDiv.classList.remove('hidden');
             errDiv.innerHTML = '<div class="validation-ok">All checks passed. Schedule is valid.</div>';
         } else {
-            showValidationErrors(errors);
+            showValidationErrors(validation.errors);
         }
     });
 
     // Save button
     document.getElementById('se-save').addEventListener('click', () => {
         const { routeId, acId, mode, times, bankId } = getEditorValues();
-        const errors = validateScheduleParams(routeId, acId, mode, times, bankId, scheduleId);
-        if (showValidationErrors(errors)) return;
+        const validation = validateScheduleParams(routeId, acId, mode, times, bankId, scheduleId);
+        if (showValidationErrors(validation.errors)) return;
 
         const result = updateSchedule(scheduleId, routeId, acId, mode, times, bankId);
         if (result) {
@@ -2321,13 +2320,13 @@ function renderFinancesPanel(container) {
                     <thead><tr><th>Month</th><th>Revenue</th><th>Costs</th><th>Profit/Loss</th></tr></thead>
                     <tbody>
                         ${pnlData.map(p => {
-                            return `<tr>
+        return `<tr>
                                 <td>Y${p.year} M${p.month}</td>
                                 <td>$${formatMoney(p.revenue)}</td>
                                 <td>$${formatMoney(p.costs)}</td>
                                 <td class="${p.profit >= 0 ? '' : 'negative'}">$${formatMoney(Math.abs(p.profit))}</td>
                             </tr>`;
-                        }).join('')}
+    }).join('')}
                     </tbody>
                 </table>
             `}
